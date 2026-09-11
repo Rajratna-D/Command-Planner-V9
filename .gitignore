@@ -1,0 +1,65 @@
+# ==============================================================================
+# Command Planner V9 - Comprehensive Git Ignore
+# ==============================================================================
+
+# Local SQLite Databases, WAL Files & Backups (Strict Data Privacy)
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+planner.db
+backend/planner.db
+planner_data.json
+planner_data.json.tmp
+*.backup
+*.json.backup
+backups/
+backend/backups/
+
+# Internal Design Docs, PRDs, and PDF Specifications
+prd.js
+Command_Planner_PRD.pdf
+*.pdf
+*.doc
+*.docx
+*.ppt
+*.pptx
+*.xls
+*.xlsx
+
+# Python Virtual Environments & Bytecode
+.venv/
+venv/
+env/
+ENV/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Node.js & Frontend Build Outputs
+node_modules/
+**/node_modules/
+dist/
+build/
+.next/
+*.tsbuildinfo
+
+# Environment Variables & Secrets
+.env
+.env.*
+!.env.example
+
+# IDE, Editor & OS Configurations
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+*.log
