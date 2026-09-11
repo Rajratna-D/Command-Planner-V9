@@ -1,4 +1,4 @@
-# ⚡ Command Planner V9 — The Full-Stack Academic Productivity Suite
+# ⚡ Command Planner V9  The Full-Stack Academic Productivity Suite
 
 [![FastAPI](https://img.shields.io/badge/Backend-FastAPI%200.115%2B-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![React 19](https://img.shields.io/badge/Frontend-React%2019.2-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev/)
