@@ -233,6 +233,41 @@ For the lowest possible memory usage and binary footprint:
 
 ---
 
+---
+
+## Ensuring 100% Offline Capability: The navigator.onLine Gotcha
+
+In standard cloud web applications, frontends often check `navigator.onLine` to determine if the computer has an active internet connection.
+
+In `frontend/src/api/client.ts`, there is an existing check:
+```typescript
+if (typeof window !== 'undefined' && !navigator.onLine)
+```
+
+Because your FastAPI backend runs directly on your computer at `127.0.0.1:8000`, network requests do not go over the internet. However, when your Wi-Fi is turned off, the browser sets `navigator.onLine = false`. This causes the client to falsely assume the server is unreachable and stop sending requests.
+
+### Solution for 100% Offline Desktop Mode:
+In `frontend/src/api/client.ts`, bypass the `!navigator.onLine` check and send requests directly to the local backend. Only handle offline state if the local `fetch()` call itself fails (meaning the local server process is stopped):
+
+```typescript
+// Allow direct requests to the local backend regardless of Wi-Fi state:
+try {
+  res = await fetch(`${BASE}${path}`, { ...options });
+} catch (networkErr) {
+  // Only triggers if the local backend server process is stopped
+  if (isGet && typeof window !== 'undefined') {
+    // Optional fallback to cached data
+  }
+  throw networkErr;
+}
+```
+
+With this fix in place:
+- You can run the application with Wi-Fi completely disabled or in airplane mode.
+- Every API call, database save, chart render, and Pomodoro session runs 100% locally.
+- Zero network packets ever leave your machine.
+
+
 ## Recommendations & Next Steps
 
 1. For everyday Windows desktop use, **Option 1 (PyWebView)** is the fastest path because it leverages the Python environment already configured in this repository.
