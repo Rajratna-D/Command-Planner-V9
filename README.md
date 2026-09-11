@@ -34,7 +34,7 @@
   - [10. ◐ Quantitative Focus & Productivity Analytics](#10--quantitative-focus--productivity-analytics)
 - [Cutting-Edge UX & Visual Polish](#-cutting-edge-ux--visual-polish)
 - [Backend REST API Specification (13 APIRouters)](#-backend-rest-api-specification-13-apirouters)
-- [Database Persistence & Zero-Data-Leak Guarantees](#-database-persistence--zero-data-leak-guarantees)
+- [Database Architecture & Data Persistence](#-database-architecture--data-persistence)
 - [Automated Testing & Quality Assurance](#-automated-testing--quality-assurance)
 - [Installation & Quick Start](#-installation--quick-start)
 - [Repository Structure](#-repository-structure)
@@ -244,7 +244,7 @@ The backend exposes an interactive **Swagger UI** at `http://localhost:8000/docs
 
 ---
 
-## 🛡️ Database Persistence & Zero-Data-Leak Guarantees
+## 💾 Database Architecture & Data Persistence
 
 ### Safe Concurrency (SQLite WAL Mode)
 Command Planner V9 configures SQLite with industry-standard concurrency pragmas on engine connect:
@@ -257,13 +257,6 @@ def set_sqlite_pragma(dbapi_connection, connection_record):
     cursor.execute("PRAGMA foreign_keys=ON")        # Strict relational integrity
     cursor.close()
 ```
-
-### Zero-Data-Leak Privacy Protocol
-The repository includes a comprehensive `.gitignore` ensuring that **no personal data, no databases, and no internal PRDs ever touch GitHub**:
-- 🚫 All database files (`planner.db`, `*.db-wal`, `*.db-shm`, `*.sqlite`) are ignored.
-- 🚫 All backup snapshots (`backups/`, `*.backup`) are ignored.
-- 🚫 All internal specifications (`prd.js`, `Command_Planner_PRD.pdf`, `*.pdf`, `*.docx`) are ignored.
-- 🚫 All dependencies (`node_modules/`, `.venv/`) and build outputs (`dist/`) are ignored.
 
 ### Seamless Historical Migration (`migrate_json.py`)
 To upgrade seamlessly from desktop versions (V1–V8), run the built-in migration bridge:
