@@ -39,6 +39,7 @@ Key features include customizable drag-and-drop dashboard widgets, a global comm
 - [Installation & Quick Start](#installation--quick-start)
 - [Desktop Packaging Guide (Standalone .exe)](DESKTOP_GUIDE.md)
 - [Cloud Deployment & Multi-Device Sync Guide](CLOUD_DEPLOYMENT_GUIDE.md)
+- [AI Integration Guide (Voice & Natural Language)](AI_INTEGRATION_GUIDE.md)
 - [Repository Structure](#repository-structure)
 - [License](#license)
 
@@ -355,6 +356,7 @@ Command-Planner-V9/
 ├── README.md                   # Project documentation
 ├── DESKTOP_GUIDE.md            # Standalone desktop packaging manual
 ├── CLOUD_DEPLOYMENT_GUIDE.md   # Private cloud deployment & mobile sync guide
+├── AI_INTEGRATION_GUIDE.md     # 3-Tier AI engine, voice STT & tool calling manual
 ├── LICENSE                     # MIT License
 ├── run.bat                     # Windows startup launcher
 ├── .gitignore                  # Git ignore rules
