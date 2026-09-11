@@ -37,9 +37,10 @@ Key features include customizable drag-and-drop dashboard widgets, a global comm
 - [Database Architecture & Concurrency](#database-architecture--concurrency)
 - [Automated Testing](#automated-testing)
 - [Installation & Quick Start](#installation--quick-start)
-- [Desktop Packaging Guide (Standalone .exe)](DESKTOP_GUIDE.md)
-- [Cloud Deployment & Multi-Device Sync Guide](CLOUD_DEPLOYMENT_GUIDE.md)
-- [AI Integration Guide (Voice & Natural Language)](AI_INTEGRATION_GUIDE.md)
+- [Production Guides & Architectural Manuals](#production-guides--architectural-manuals)
+  - [1. Desktop Packaging Guide (Standalone .exe)](DESKTOP_GUIDE.md)
+  - [2. Cloud Deployment & Multi-Device Sync Guide](CLOUD_DEPLOYMENT_GUIDE.md)
+  - [3. AI Integration Guide (Voice & Natural Language)](AI_INTEGRATION_GUIDE.md)
 - [Repository Structure](#repository-structure)
 - [License](#license)
 
@@ -346,6 +347,108 @@ npm install
 npm run dev
 ```
 Web client: `http://localhost:5173`.
+
+---
+
+## Production Guides & Architectural Manuals
+
+Command Planner V9 includes three comprehensive, production-grade engineering guides that cover everything required to package the platform as a standalone desktop app, deploy it to the cloud with multi-device synchronization, or integrate cutting-edge local and cloud AI intelligence.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                     COMMAND PLANNER V9 ARCHITECTURE MANUALS                     │
+├─────────────────────────┬─────────────────────────────┬─────────────────────────┤
+│    DESKTOP PACKAGING    │      CLOUD DEPLOYMENT       │     AI INTEGRATION      │
+│   (DESKTOP_GUIDE.md)    │ (CLOUD_DEPLOYMENT_GUIDE.md) │(AI_INTEGRATION_GUIDE.md)│
+├─────────────────────────┼─────────────────────────────┼─────────────────────────┤
+│ • Native Edge WebView2  │ • 5 Cloud Hosting Options   │ • 3 Operational Tiers   │
+│ • Single-Instance Mutex │ • Tailscale & Cloudflare TZ │ • Ollama Local Models   │
+│ • Tray Minimization     │ • Argon2id Auth Blueprint   │ • Faster-Whisper & VAD  │
+│ • Windows Action Center │ • UFW Firewall & Fail2ban   │ • Cloud BYOK (OpenAI/   │
+│ • Inno Setup Installer  │ • Zero-Loss WAL Backups     │   Claude/Gemini/Groq)   │
+│ • Code Signing & Trust  │ • Mobile PWA & Notch CSS    │ • 6-Tool Function Schema│
+│ • Portable USB Mode     │ • Breach Incident Response  │ • React Voice Overlay   │
+└─────────────────────────┴─────────────────────────────┴─────────────────────────┘
+```
+
+### 1. Desktop Packaging Guide: [DESKTOP_GUIDE.md](DESKTOP_GUIDE.md)
+
+A comprehensive manual for transforming Command Planner V9 from a client-server web app into a single, high-performance desktop application (`.exe` on Windows, `.app` on macOS, and `AppImage` on Linux).
+
+* **Recommended Architecture (PyWebView Pipeline)**: Binds the compiled React 19 frontend and FastAPI backend into a single unified process using the native Microsoft Edge WebView2 runtime (preinstalled on 99%+ of Windows PCs), eliminating heavy Chromium/Node.js bundling overhead.
+* **Alternative Pipelines**: Complete walkthroughs for Electron (`electron-builder`) and Tauri v2 sidecar packaging.
+* **Native Desktop Polish**:
+  * **Single-Instance Mutex Lock**: Uses Windows kernel mutex (`CreateMutexW`) to prevent duplicate app launches, automatically bringing the existing window into focus.
+  * **System Tray Minimization**: Minimizes to the Windows system tray (`pystray`), allowing Pomodoro timers and audio alerts to tick continuously in the background.
+  * **Windows Action Center Notifications**: Fires native Windows 10/11 toast notifications for Pomodoro cycle completions and urgent task deadlines.
+  * **Global Hotkey Summon (`Ctrl + Shift + P`)**: Summons the planner from anywhere in the OS.
+  * **Launch on Startup**: Configures registry autostart for instant morning productivity.
+* **Enterprise Installer & Signing**:
+  * **Inno Setup Script**: Automated script generating a clean installer with custom icons, start menu shortcuts, and uninstaller.
+  * **Windows Code Signing (SmartScreen Trust)**: Step-by-step instructions for eliminating the Windows SmartScreen "Unknown Publisher" prompt using self-signed certificates or trusted Certificate Authorities (DigiCert, Sectigo, Certum).
+* **Reliability & Portability**:
+  * **Crash Logging & Diagnostics**: Unhandled exceptions are automatically routed to daily rotated log files in `%APPDATA%/CommandPlannerV9/logs/`.
+  * **Portable USB Drive Mode**: Automatic detection of `portable.marker` allows students to run the planner directly off a USB thumb drive on school or library computers without installation.
+  * **100% Air-Gapped Offline Operation**: Replaces external CDN fonts with self-hosted Google Fonts and fixes browser `navigator.onLine` false positives.
+
+### 2. Cloud Deployment and Multi-Device Sync Guide: [CLOUD_DEPLOYMENT_GUIDE.md](CLOUD_DEPLOYMENT_GUIDE.md)
+
+A complete manual for hosting Command Planner V9 in the cloud so you can synchronize your tasks, coursework, practicals, notes, and timers across your phone, tablet, laptop, and desktop while keeping your data locked down.
+
+* **5 Deployment Blueprints Compared**:
+  1. **Tailscale Private Mesh (Recommended for Personal Use)**: Zero exposed public ports, WireGuard encrypted, free automated HTTPS (`tailscale cert`).
+  2. **Cloudflare Zero Trust Tunnel**: Expose via your own custom domain with passkey, Google, or GitHub single sign-on authentication in front of the app.
+  3. **VPS + Docker Compose + Caddy**: Automated Let's Encrypt TLS reverse proxy on any cheap Linux VPS ($3-$5/month).
+  4. **Fly.io Global Edge**: Single Dockerfile deployment with persistent NVMe volumes and automatic zero-to-one scaling.
+  5. **Always-Free Oracle Cloud Blueprint**: Step-by-step setup guide for running on Oracle Cloud's 4-core, 24GB RAM Ampere ARM64 instance at $0.00/month forever.
+* **In-App Single-User Authentication Blueprint**: Complete, copy-paste ready authentication layer featuring Argon2id password hashing, JWT session cookies with `HttpOnly` and `SameSite=Lax` flags, token expiration, brute-force IP rate limiting, and a native React `LoginModal.tsx`.
+* **8 Critical Deployment Gotchas**: Covers ephemeral container wipes, SQLite network drive corruption, exposed port 8000, CORS misconfigurations, SPA 404 refresh routing, and SSH process termination.
+* **Security Vulnerabilities & Hardening**:
+  * **Pre-Deployment**: Supply chain CVE auditing (`pip audit`, `npm audit`), GitHub Dependabot automation, Dockerfile non-root user setup, and secrets scanning.
+  * **Post-Deployment**: UFW firewall configuration, Fail2ban brute-force protection, Shodan/Censys port scan mitigation, and DNS rebinding defenses.
+  * **Incident Response Blueprint**: Actionable 6-step breach containment, credential rotation, and forensic audit guide.
+* **Mobile PWA & Real-Time Sync**:
+  * Step-by-step installation instructions for iOS Safari and Android Chrome.
+  * Safe-area notch and home-indicator handling (`viewport-fit=cover` and CSS env variables).
+  * Background timer keep-alive techniques to prevent mobile OS battery optimizers from killing active Pomodoros.
+  * Multi-device synchronization via Window Focus refetching and Server-Sent Events (SSE).
+* **Automated Cloud Backup Pipeline**: Zero-downtime hot database backups using `sqlite3 .backup` streaming to Amazon S3, Backblaze B2, or Google Drive via Rclone.
+
+### 3. AI Integration Guide (Voice & Natural Language): [AI_INTEGRATION_GUIDE.md](AI_INTEGRATION_GUIDE.md)
+
+A comprehensive guide for integrating artificial intelligence, voice commands, and autonomous syllabus processing into Command Planner V9.
+
+* **3-Tier AI System**:
+  * **Tier 1 (Zero-Config / Free Tier)**: Google Gemini 1.5 Flash (15 RPM free), Groq Cloud (free Llama 3.3 70B & Whisper Large V3), and In-Browser WebGPU AI (Transformers.js + WebLLM) requiring zero server configuration.
+  * **Tier 2 (Bring-Your-Own-Key / BYOK)**: Commercial APIs from OpenAI (GPT-4o, GPT-4o-mini), Anthropic (Claude 3.5 Sonnet, Claude 3.5 Haiku), and DeepSeek (V3, R1) with client-side Web Crypto AES-GCM encrypted vault storage.
+  * **Tier 3 (100% Private Local AI)**: Completely offline, air-gapped stack running Ollama and Faster-Whisper on local hardware with zero data leaving the machine.
+* **Hardware Matrix & Feasibility**:
+  * Dedicated GPU VRAM requirements (4GB, 8GB, 12-16GB, 24GB+).
+  * Apple Silicon Unified Memory matrix (M1-M4 from 8GB to 128GB with Metal acceleration).
+  * CPU-only inference fallback with GGUF quantization (AVX2 instructions, RAM bandwidth, token speed benchmarks).
+* **Best Models for Function Calling & Command Execution**:
+  * **Gold Winner**: **Qwen 2.5 (7B / 14B Instruct)** - Highest benchmarked tool-calling accuracy, 128k context, and strict schema compliance.
+  * **Runner-Up**: **Llama 3.1 8B / 3.2 3B Instruct** - Native tool-calling tokens and low resource overhead.
+  * **Specialist**: **DeepSeek-R1-Distill-Qwen-14B** - Chain-of-thought reasoning for full semester syllabus scheduling.
+  * **Quantization Guide**: Why `Q4_K_M` delivers 96% of FP16 accuracy at 65% memory savings.
+* **Speech-to-Text (STT) Voice Command Pipeline**:
+  * Comparison of Faster-Whisper (CTranslate2), Whisper.cpp, Groq Whisper LPU (~200ms latency), OpenAI Whisper API, and Web Speech API.
+  * Silero Voice Activity Detection (VAD) integration for automatic 700ms silence detection and hands-free recording cutoff.
+* **App Tuning & Customization**:
+  * Dedicated UI panel for tuning model hyperparameters (Temperature 0.1 for deterministic tool calls vs 0.7 for notes, Top_P, Max Tokens).
+  * Microphone sensitivity and VAD energy thresholds.
+  * Discipline-specific academic personas (STEM & Engineering, Humanities & Law, Minimalist).
+  * Client-side privacy redaction filters.
+* **Deterministic Function Calling Engine**:
+  * Strict JSON schemas for 6 core tools: `create_task`, `create_exam_countdown`, `start_pomodoro`, `create_coursework_assignment`, `generate_syllabus_breakdown`, and `smart_query_planner`.
+  * 4-stage output sanitization and regex recovery pipeline preventing malformed JSON crashes.
+* **Drop-In Production Blueprints**:
+  * `backend/services/ai_gateway.py`: Unified multi-provider gateway.
+  * `backend/services/stt_service.py`: Local Faster-Whisper and Groq Whisper audio transcription engine.
+  * `backend/routers/ai_router.py`: FastAPI endpoints for `/api/ai/command`, `/api/ai/transcribe`, and `/api/ai/health`.
+  * `frontend/src/stores/aiStore.ts`: Persistent Zustand 5 store for settings and provider state.
+  * `frontend/src/components/ai/VoiceCommandBar.tsx`: React 19 voice recording overlay with real-time waveform animations.
+  * `frontend/src/components/ai/AISettingsModal.tsx`: Full tuning modal interface.
 
 ---
 
