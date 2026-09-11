@@ -38,7 +38,15 @@ A comprehensive, production-grade manual for packaging Command Planner V9 into a
   - [8.6 Global Hotkey Summon (Ctrl + Shift + P)](#86-global-hotkey-summon-ctrl--shift--p)
 - [9. Professional Windows Installer Creation (Inno Setup)](#9-professional-windows-installer-creation-inno-setup)
 - [10. Safe Application Updates Without Data Loss](#10-safe-application-updates-without-data-loss)
-- [11. Desktop Verification Checklist](#11-desktop-verification-checklist)
+- [11. Windows Code Signing and SmartScreen Trust](#11-windows-code-signing-and-smartscreen-trust)
+  - [Option A: Self-Signed Certificate (Free, Developer Use)](#option-a-self-signed-certificate-free-developer-use)
+  - [Option B: Trusted Code Signing Certificate (Public Distribution)](#option-b-trusted-code-signing-certificate-public-distribution)
+- [12. Crash Logging and Production Diagnostics](#12-crash-logging-and-production-diagnostics)
+- [13. Portable Mode (USB Drive Execution Without Installation)](#13-portable-mode-usb-drive-execution-without-installation)
+- [14. Cross-Platform Build Notes (macOS and Linux)](#14-cross-platform-build-notes-macos-and-linux)
+  - [macOS (.app Bundle via py2app)](#macos-app-bundle-via-py2app)
+  - [Linux (AppImage via AppImageTool)](#linux-appimage-via-appimagetool)
+- [15. Desktop Verification Checklist](#15-desktop-verification-checklist)
 
 ---
 
@@ -812,7 +820,392 @@ When you release V9.1 or V10.0:
 
 ---
 
-## 11. Desktop Verification Checklist
+## 11. Windows Code Signing and SmartScreen Trust
+
+When users download and run your `.exe` installer, Windows SmartScreen displays a full-screen warning: **"Windows protected your PC - Microsoft Defender SmartScreen prevented an unrecognized app from starting."** This is the number one reason users abandon unsigned desktop applications.
+
+### Why SmartScreen Blocks Your App
+
+Microsoft assigns a trust reputation to every executable based on its code signing certificate. A brand new, unsigned binary has zero reputation. SmartScreen flags it as potentially dangerous because:
+1. No certificate authority has verified the publisher's identity.
+2. The binary has no download history (it has never been seen before by Microsoft's telemetry).
+3. PyInstaller-compiled binaries share structural patterns with actual malware droppers.
+
+### Option A: Self-Signed Certificate (Free, Developer Use)
+
+For personal use or distributing to a small group who trusts you, a self-signed certificate removes the "unknown publisher" label:
+
+```powershell
+# 1. Generate a self-signed code signing certificate (valid 3 years)
+$cert = New-SelfSignedCertificate `
+    -Subject "CN=Rajratna Dhiwar, O=Command Planner, L=India" `
+    -Type CodeSigningCert `
+    -CertStoreLocation "Cert:\CurrentUser\My" `
+    -NotAfter (Get-Date).AddYears(3)
+
+# 2. Export the certificate to a .pfx file (you will need this for signing)
+$password = ConvertTo-SecureString -String "YourCertPassword" -Force -AsPlainText
+Export-PfxCertificate -Cert $cert -FilePath "$HOME\code_signing.pfx" -Password $password
+
+# 3. Sign the compiled executable
+Set-AuthenticodeSignature `
+    -FilePath "dist\CommandPlannerV9\CommandPlannerV9.exe" `
+    -Certificate $cert `
+    -TimestampServer "http://timestamp.digicert.com"
+
+# 4. Verify the signature
+Get-AuthenticodeSignature "dist\CommandPlannerV9\CommandPlannerV9.exe"
+```
+
+**Limitation**: Self-signed certificates are not trusted by Windows globally. Recipients must manually install your certificate into their Trusted Publishers store, or click through a less aggressive SmartScreen warning ("Publisher: Rajratna Dhiwar" instead of "Unknown Publisher").
+
+### Option B: Trusted Code Signing Certificate (Public Distribution)
+
+For public distribution where users should see zero warnings:
+
+| Provider | Cost | Verification | SmartScreen Reputation |
+|---|---|---|---|
+| **SignPath.io** (Open Source Program) | Free for OSS | GitHub repo verification | Immediate trust |
+| **Certum Open Source** | ~$26/year | Identity verification | Builds over time |
+| **DigiCert / Sectigo** | $200 to $400/year | Organization verification | Immediate trust |
+| **Azure Trusted Signing** | ~$10/month | Microsoft account | Immediate trust |
+
+After obtaining a certificate:
+
+```powershell
+# Sign with a .pfx certificate from a trusted CA
+signtool sign /f "cert.pfx" /p "password" /tr http://timestamp.digicert.com /td sha256 /fd sha256 "dist\CommandPlannerV9\CommandPlannerV9.exe"
+
+# Also sign the Inno Setup installer
+signtool sign /f "cert.pfx" /p "password" /tr http://timestamp.digicert.com /td sha256 /fd sha256 "dist-installer\CommandPlannerV9_Setup.exe"
+```
+
+### Signing the Inno Setup Installer Automatically
+
+Add the `SignTool` directive to your `installer.iss` so the installer is signed during compilation:
+
+```pascal
+[Setup]
+SignTool=signtool /f "$qcert.pfx$q" /p "$qpassword$q" /tr http://timestamp.digicert.com /td sha256 /fd sha256 $f
+```
+
+---
+
+## 12. Crash Logging and Production Diagnostics
+
+When the packaged desktop app crashes in production, you need a way to diagnose the failure without a terminal window. Add persistent logging to `desktop.py`:
+
+```python
+import logging
+import os
+import sys
+import traceback
+from datetime import datetime
+
+def setup_crash_logger():
+    # Store logs next to the database in the persistent data directory
+    if getattr(sys, 'frozen', False):
+        log_dir = os.path.join(os.getenv('LOCALAPPDATA', os.path.expanduser('~')), 'CommandPlannerV9', 'logs')
+    else:
+        log_dir = os.path.join(os.path.dirname(__file__), 'logs')
+    
+    os.makedirs(log_dir, exist_ok=True)
+    log_file = os.path.join(log_dir, f"planner_{datetime.now().strftime('%Y%m%d')}.log")
+    
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
+        handlers=[
+            logging.FileHandler(log_file, encoding='utf-8'),
+        ]
+    )
+    return logging.getLogger('desktop')
+
+def global_exception_handler(exc_type, exc_value, exc_tb):
+    logger = logging.getLogger('desktop')
+    logger.critical(
+        "Unhandled exception:\n" + "".join(traceback.format_exception(exc_type, exc_value, exc_tb))
+    )
+
+# In desktop.py main(), add at the very top:
+logger = setup_crash_logger()
+sys.excepthook = global_exception_handler
+
+logger.info("Application starting")
+logger.info(f"Python: {sys.version}")
+logger.info(f"Frozen: {getattr(sys, 'frozen', False)}")
+logger.info(f"Data directory: {os.getenv('LOCALAPPDATA', 'N/A')}")
+```
+
+### Log File Location
+
+```
+%LOCALAPPDATA%\CommandPlannerV9\logs\
+   planner_20260911.log
+   planner_20260912.log
+   ...
+```
+
+When a user reports a crash, ask them to send the latest `.log` file from this directory.
+
+### Automatic Log Rotation
+
+To prevent log files from consuming disk space indefinitely:
+
+```python
+import glob
+
+def cleanup_old_logs(log_dir, keep_days=30):
+    # Delete log files older than 30 days
+    cutoff = datetime.now().timestamp() - (keep_days * 86400)
+    for log_file in glob.glob(os.path.join(log_dir, "planner_*.log")):
+        if os.path.getmtime(log_file) < cutoff:
+            os.remove(log_file)
+```
+
+---
+
+## 13. Portable Mode (USB Drive Execution Without Installation)
+
+Students using shared library or lab computers often cannot install software. A portable build runs directly from a USB flash drive with zero installation and zero administrator privileges.
+
+### How Portable Mode Works
+
+The key difference from installed mode is that the database and logs are stored next to the executable instead of in `%LOCALAPPDATA%`. Modify `backend/database.py` to detect portable mode:
+
+```python
+import os
+import sys
+
+def get_data_directory():
+    if getattr(sys, 'frozen', False):
+        exe_dir = os.path.dirname(sys.executable)
+        
+        # Portable mode: if a file named "portable.marker" exists next to the .exe,
+        # store data in a "data" subfolder next to the executable
+        portable_marker = os.path.join(exe_dir, "portable.marker")
+        if os.path.exists(portable_marker):
+            target = os.path.join(exe_dir, "data")
+        else:
+            # Installed mode: store in AppData
+            app_data = os.getenv('LOCALAPPDATA', os.path.expanduser('~'))
+            target = os.path.join(app_data, 'CommandPlannerV9')
+    else:
+        target = os.path.dirname(os.path.abspath(__file__))
+    
+    os.makedirs(target, exist_ok=True)
+    return target
+```
+
+### Creating a Portable Distribution
+
+1. Build the application normally using `build_desktop.bat`.
+2. Copy the entire `dist\CommandPlannerV9\` folder to a USB drive.
+3. Create an empty file named `portable.marker` in the same folder as `CommandPlannerV9.exe`.
+
+```cmd
+:: Create the portable marker
+type nul > "E:\CommandPlannerV9\portable.marker"
+```
+
+### USB Drive Folder Structure
+
+```
+E:\ (USB Drive)
+└── CommandPlannerV9\
+    ├── CommandPlannerV9.exe
+    ├── portable.marker          <-- Activates portable mode
+    ├── python311.dll
+    ├── frontend/dist/
+    └── data/                    <-- Created automatically on first run
+        ├── planner.db
+        ├── planner.db-wal
+        └── logs/
+```
+
+The student plugs in the USB, double-clicks the `.exe`, and their planner launches with all their data. When they unplug the USB, nothing is left on the host machine.
+
+---
+
+## 14. Cross-Platform Build Notes (macOS and Linux)
+
+While the primary development target is Windows, the PyWebView + FastAPI architecture is cross-platform. Here are the platform-specific adjustments.
+
+### macOS (.app Bundle via py2app)
+
+#### Prerequisites
+```bash
+# Install Homebrew dependencies
+brew install python@3.11
+pip3 install pywebview py2app uvicorn fastapi sqlalchemy
+```
+
+#### Build Script (`build_macos.sh`)
+```bash
+#!/bin/bash
+set -e
+
+echo "[1/3] Building frontend..."
+cd frontend && npm run build && cd ..
+
+echo "[2/3] Creating macOS app bundle..."
+
+# Create py2app setup file
+cat > setup_mac.py << 'EOF'
+from setuptools import setup
+
+APP = ['desktop.py']
+DATA_FILES = [('frontend/dist', ['frontend/dist'])]
+OPTIONS = {
+    'argv_emulation': False,
+    'iconfile': 'assets/icon.icns',
+    'packages': ['backend', 'uvicorn', 'fastapi', 'sqlalchemy', 'pydantic'],
+    'plist': {
+        'CFBundleName': 'Command Planner V9',
+        'CFBundleDisplayName': 'Command Planner V9',
+        'CFBundleIdentifier': 'com.rajratna.commandplanner.v9',
+        'CFBundleVersion': '9.0.0',
+        'CFBundleShortVersionString': '9.0.0',
+        'LSMinimumSystemVersion': '11.0',
+        'NSHighResolutionCapable': True,
+    }
+}
+
+setup(
+    app=APP,
+    data_files=DATA_FILES,
+    options={'py2app': OPTIONS},
+    setup_requires=['py2app'],
+)
+EOF
+
+python3 setup_mac.py py2app
+
+echo "[3/3] Build complete!"
+echo "App bundle: dist/Command Planner V9.app"
+```
+
+#### macOS-Specific Notes
+- **WebView Engine**: macOS uses WKWebView (Safari/WebKit) instead of Chromium. Test CSS rendering differences, particularly for backdrop-filter and scrollbar styling.
+- **Data Directory**: Use `~/Library/Application Support/CommandPlannerV9/` instead of `%LOCALAPPDATA%`:
+
+```python
+import platform
+
+def get_data_directory():
+    system = platform.system()
+    if system == "Darwin":
+        return os.path.expanduser("~/Library/Application Support/CommandPlannerV9")
+    elif system == "Linux":
+        return os.path.join(os.getenv("XDG_DATA_HOME", os.path.expanduser("~/.local/share")), "CommandPlannerV9")
+    else:
+        return os.path.join(os.getenv("LOCALAPPDATA", os.path.expanduser("~")), "CommandPlannerV9")
+```
+
+- **Icon Format**: macOS requires `.icns` format instead of `.ico`. Convert using:
+  ```bash
+  # Requires a 1024x1024 PNG source image
+  mkdir icon.iconset
+  sips -z 16 16 icon_1024.png --out icon.iconset/icon_16x16.png
+  sips -z 32 32 icon_1024.png --out icon.iconset/icon_16x16@2x.png
+  sips -z 128 128 icon_1024.png --out icon.iconset/icon_128x128.png
+  sips -z 256 256 icon_1024.png --out icon.iconset/icon_128x128@2x.png
+  sips -z 256 256 icon_1024.png --out icon.iconset/icon_256x256.png
+  sips -z 512 512 icon_1024.png --out icon.iconset/icon_256x256@2x.png
+  sips -z 512 512 icon_1024.png --out icon.iconset/icon_512x512.png
+  sips -z 1024 1024 icon_1024.png --out icon.iconset/icon_512x512@2x.png
+  iconutil -c icns icon.iconset
+  ```
+
+- **Gatekeeper**: Unsigned `.app` bundles are blocked by macOS Gatekeeper. Users must right-click and select "Open" to bypass the warning on first launch. For proper distribution, sign with an Apple Developer ID ($99/year).
+
+---
+
+### Linux (AppImage via AppImageTool)
+
+AppImage is a portable Linux format that runs on any distribution without installation, package managers, or root access.
+
+#### Prerequisites
+```bash
+sudo apt install python3-venv python3-pip
+pip3 install pywebview pyinstaller uvicorn fastapi sqlalchemy
+
+# Download AppImageTool
+wget https://github.com/AppImage/AppImageKit/releases/latest/download/appimagetool-x86_64.AppImage
+chmod +x appimagetool-x86_64.AppImage
+```
+
+#### Build Script (`build_linux.sh`)
+```bash
+#!/bin/bash
+set -e
+
+echo "[1/4] Building frontend..."
+cd frontend && npm run build && cd ..
+
+echo "[2/4] Packaging with PyInstaller..."
+pyinstaller --noconfirm --onedir --windowed \
+    --name "CommandPlannerV9" \
+    --add-data "frontend/dist:frontend/dist" \
+    --hidden-import "uvicorn.logging" \
+    --hidden-import "uvicorn.loops" \
+    --hidden-import "uvicorn.loops.auto" \
+    --hidden-import "uvicorn.protocols" \
+    --hidden-import "uvicorn.protocols.http" \
+    --hidden-import "uvicorn.protocols.http.auto" \
+    --hidden-import "uvicorn.lifespans" \
+    --hidden-import "uvicorn.lifespans.on" \
+    desktop.py
+
+echo "[3/4] Creating AppImage structure..."
+mkdir -p AppDir/usr/bin AppDir/usr/share/applications AppDir/usr/share/icons/hicolor/256x256/apps
+
+# Copy PyInstaller output
+cp -r dist/CommandPlannerV9/* AppDir/usr/bin/
+
+# Copy icon
+cp assets/icon.png AppDir/usr/share/icons/hicolor/256x256/apps/commandplannerv9.png
+cp assets/icon.png AppDir/commandplannerv9.png
+
+# Create .desktop file
+cat > AppDir/commandplannerv9.desktop << 'EOF'
+[Desktop Entry]
+Type=Application
+Name=Command Planner V9
+Exec=CommandPlannerV9
+Icon=commandplannerv9
+Categories=Office;ProjectManagement;
+Comment=Academic and personal productivity planner
+EOF
+
+cp AppDir/commandplannerv9.desktop AppDir/usr/share/applications/
+
+# Create AppRun entry point
+cat > AppDir/AppRun << 'APPRUN'
+#!/bin/bash
+HERE="$(dirname "$(readlink -f "$0")")"
+exec "$HERE/usr/bin/CommandPlannerV9" "$@"
+APPRUN
+chmod +x AppDir/AppRun
+
+echo "[4/4] Building AppImage..."
+./appimagetool-x86_64.AppImage AppDir CommandPlannerV9-x86_64.AppImage
+
+echo "Build complete: CommandPlannerV9-x86_64.AppImage"
+```
+
+#### Linux-Specific Notes
+- **WebView Engine**: Linux PyWebView uses GTK WebKit2 (`libwebkit2gtk-4.1`). Install it with:
+  ```bash
+  sudo apt install libwebkit2gtk-4.1-dev gir1.2-webkit2-4.1
+  ```
+- **Wayland vs X11**: PyWebView works on both Wayland and X11. If you encounter blank windows on Wayland, set `GDK_BACKEND=x11` as a fallback.
+- **Permissions**: AppImage files need execute permission: `chmod +x CommandPlannerV9-x86_64.AppImage`.
+- **Data Directory**: Linux follows the XDG Base Directory Specification. Data goes to `~/.local/share/CommandPlannerV9/`.
+
+---
+
+## 15. Desktop Verification Checklist
 
 Use this checklist to confirm production readiness before distributing your desktop application:
 
@@ -825,3 +1218,7 @@ Use this checklist to confirm production readiness before distributing your desk
 - [ ] **Chart Verification**: Open the Productivity tab. Confirm the 52-week heatmap and Kiviat radar charts render correctly via SVG.
 - [ ] **Tray Test**: Click minimize or hide. Confirm the tray icon appears next to the Windows clock and that clicking it restores the window.
 - [ ] **Installer Test**: Run `CommandPlannerV9_Setup.exe`. Verify the desktop shortcut, Start Menu group, and uninstaller in Windows Settings.
+- [ ] **Code Signing Check**: Right-click the `.exe`, select Properties, and check the Digital Signatures tab. Confirm your certificate is listed.
+- [ ] **Crash Log Test**: Force-close the application via Task Manager. Relaunch and verify a crash log entry was written to `%LOCALAPPDATA%\CommandPlannerV9\logs\`.
+- [ ] **Portable Mode Test**: Copy the build folder to a USB drive. Create `portable.marker`. Launch from the USB. Verify the database is created inside the USB folder, not in AppData.
+- [ ] **SmartScreen Test**: Transfer the signed installer to a different Windows PC. Run it and verify no SmartScreen warning appears (or shows your publisher name instead of "Unknown Publisher").

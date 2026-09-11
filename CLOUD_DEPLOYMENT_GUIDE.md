@@ -43,7 +43,15 @@ A comprehensive, production-grade guide to deploying Command Planner V9 to the c
   - [Mobile Screen-Lock and Background Timer Gotchas](#mobile-screen-lock-and-background-timer-gotchas)
   - [Mobile Safe-Area Insets and Notch Handling (CSS Polish)](#mobile-safe-area-insets-and-notch-handling-css-polish)
 - [9. Automated Off-Site Cloud Backup Pipeline](#9-automated-off-site-cloud-backup-pipeline)
-- [10. Multi-Device Sync Verification Checklist](#10-multi-device-sync-verification-checklist)
+- [10. Security Vulnerabilities and Hardening](#10-security-vulnerabilities-and-hardening)
+  - [Pre-Deployment Vulnerabilities (Before You Go Live)](#pre-deployment-vulnerabilities-before-you-go-live)
+  - [Post-Deployment Vulnerabilities (After You Go Live)](#post-deployment-vulnerabilities-after-you-go-live)
+  - [Docker Container Hardening](#docker-container-hardening)
+  - [Firewall Configuration (UFW on Ubuntu)](#firewall-configuration-ufw-on-ubuntu)
+  - [Dependency Vulnerability Scanning](#dependency-vulnerability-scanning)
+  - [Access Monitoring and Log Review](#access-monitoring-and-log-review)
+- [11. Incident Response: What to Do If Compromised](#11-incident-response-what-to-do-if-compromised)
+- [12. Multi-Device Sync Verification Checklist](#12-multi-device-sync-verification-checklist)
 
 ---
 
@@ -671,7 +679,484 @@ find "$BACKUP_DIR" -name "planner_*.db.gz" -mtime +14 -delete
 
 ---
 
-## 10. Multi-Device Sync Verification Checklist
+## 10. Security Vulnerabilities and Hardening
+
+Deploying a personal application to the internet introduces real attack surface. This section catalogs specific vulnerabilities you will face before and after deployment, with concrete fixes for each one.
+
+### Pre-Deployment Vulnerabilities (Before You Go Live)
+
+These are weaknesses that exist in your codebase or build pipeline before the server is ever exposed to the network.
+
+#### Vulnerability 1: Hardcoded Secrets in Source Code
+- **Risk**: Your `APP_MASTER_PASSWORD`, `JWT_SECRET`, or database credentials are committed directly in Python source files or `docker-compose.yml`. Anyone who gains access to your Git repository (public or private leak) can authenticate as you.
+- **Impact**: Full account takeover. Attacker can read, modify, and delete all your tasks, notes, and exam data.
+- **Fix**: Store all secrets in environment variables or a `.env` file. Add `.env` to `.gitignore` before your first commit. Rotate any secrets that were ever committed to version control, even if you later deleted them, because Git history preserves every version permanently.
+
+```bash
+# .env file (never committed to Git)
+APP_MASTER_PASSWORD=YourActual50CharRandomPasswordHere
+JWT_SECRET=another-random-string-minimum-32-characters
+DB_PATH=/data/planner.db
+```
+
+```bash
+# Verify .env is in .gitignore
+grep -q ".env" .gitignore || echo ".env" >> .gitignore
+
+# Scan entire Git history for accidentally committed secrets
+git log --all -p | grep -i "password\|secret\|api_key" | head -20
+```
+
+---
+
+#### Vulnerability 2: Debug Mode Left Enabled in Production
+- **Risk**: Running Uvicorn with `--reload` or FastAPI with `debug=True` in production exposes detailed Python stack traces to any visitor. Stack traces reveal internal file paths, library versions, and database schema details.
+- **Impact**: Information disclosure. Attackers use stack traces to identify which exact library versions you run, then search for known CVEs (Common Vulnerabilities and Exposures) in those versions.
+- **Fix**: Always run production with `log_level="warning"` and never use `--reload`:
+
+```bash
+# Correct production launch
+uvicorn backend.main:app --host 127.0.0.1 --port 8000 --log-level warning --workers 1
+
+# NEVER in production
+uvicorn backend.main:app --reload --log-level debug  # Exposes file watcher + stack traces
+```
+
+---
+
+#### Vulnerability 3: Outdated Dependencies with Known CVEs
+- **Risk**: Your `requirements.txt` or `package.json` pins dependency versions that contain publicly disclosed security bugs. Automated scanners (bots) specifically target servers running vulnerable library versions.
+- **Impact**: Ranges from denial-of-service to remote code execution, depending on the specific CVE.
+- **Fix**: Run vulnerability scans before every deployment:
+
+```bash
+# Python backend
+pip install pip-audit
+pip-audit
+
+# Node.js frontend
+cd frontend
+npm audit
+npm audit fix
+```
+
+---
+
+#### Vulnerability 4: Docker Image Running as Root
+- **Risk**: If your Dockerfile does not specify a non-root user, the application process runs as `root` inside the container. If an attacker exploits a vulnerability in your Python code to execute arbitrary commands, they gain root-level access to the container filesystem.
+- **Impact**: Container escape in worst case. Read/write access to all mounted volumes including your database.
+- **Fix**: See the [Docker Container Hardening](#docker-container-hardening) section below.
+
+---
+
+#### Vulnerability 5: Unpatched Base OS Image
+- **Risk**: Your VPS or Docker base image (e.g., `python:3.11-slim`) ships with system libraries that may have unpatched vulnerabilities. Cloud providers do not auto-patch your VM's operating system.
+- **Impact**: Kernel-level exploits, privilege escalation.
+- **Fix**: Enable unattended security updates:
+
+```bash
+# Ubuntu/Debian
+sudo apt update && sudo apt upgrade -y
+sudo apt install unattended-upgrades -y
+sudo dpkg-reconfigure -plow unattended-upgrades
+```
+
+---
+
+### Post-Deployment Vulnerabilities (After You Go Live)
+
+These are attack vectors that become relevant once your server is running and accessible over a network.
+
+#### Vulnerability 6: Port Scanning and Service Fingerprinting
+- **Risk**: Automated scanners like Shodan, Censys, and Masscan continuously scan the entire IPv4 address space. Within 30 minutes of exposing port 8000 on a public IP, your server will be indexed and its service type (Uvicorn/FastAPI) fingerprinted.
+- **Impact**: Attackers know exactly what software you run, which libraries respond to health checks, and can target version-specific exploits.
+- **Fix**: Never expose port 8000 directly. Use Tailscale (zero open ports), Cloudflare Tunnel (zero open ports), or place Caddy/Nginx in front to proxy through port 443 only.
+
+---
+
+#### Vulnerability 7: Brute-Force Password Attacks
+- **Risk**: If your login endpoint is publicly reachable, attackers will run automated dictionary attacks trying thousands of common passwords per minute.
+- **Impact**: If your master password is weak (under 16 characters, dictionary word, no special characters), it will be cracked.
+- **Fix**: The in-app rate limiter (5 attempts per 60 seconds per IP) helps, but determined attackers use rotating IP addresses. Layer your defenses:
+  1. Use a master password with 20+ characters and mixed character types
+  2. Add Fail2ban at the OS level (see firewall section below)
+  3. Prefer Cloudflare Access or Tailscale to eliminate the public login endpoint entirely
+
+---
+
+#### Vulnerability 8: Session Cookie Theft (Man-in-the-Middle)
+- **Risk**: If you access the application over plain HTTP (not HTTPS), anyone on the same Wi-Fi network can intercept your session cookie using packet capture tools like Wireshark.
+- **Impact**: Full session hijacking. The attacker imports your cookie into their browser and has complete access to your planner without knowing your password.
+- **Fix**: Enforce HTTPS everywhere. The `Secure` flag on the session cookie (set in the auth blueprint) ensures the browser never sends the cookie over unencrypted connections. Use Caddy (automatic HTTPS) or Tailscale HTTPS certs.
+
+---
+
+#### Vulnerability 9: DNS Rebinding Attack on Localhost Services
+- **Risk**: If your FastAPI backend binds to `0.0.0.0` without authentication, a malicious website can use DNS rebinding to redirect a victim's browser to make requests to `127.0.0.1:8000`, bypassing same-origin restrictions.
+- **Impact**: Unauthorized data access from a victim's browser if they visit a malicious page while your server is running.
+- **Fix**: Always require authentication on all API endpoints (the auth middleware handles this). Additionally, set the `Host` header validation in production:
+
+```python
+# Add to backend/main.py
+ALLOWED_HOSTS = {"127.0.0.1", "localhost", "planner.yourdomain.com"}
+
+@app.middleware("http")
+async def validate_host(request, call_next):
+    host = request.headers.get("host", "").split(":")[0]
+    if host not in ALLOWED_HOSTS:
+        return JSONResponse(status_code=400, content={"detail": "Invalid host header"})
+    return await call_next(request)
+```
+
+---
+
+#### Vulnerability 10: SQLite Database File Theft via Path Traversal
+- **Risk**: A bug in the SPA catch-all route (`/{full_path:path}`) could theoretically allow an attacker to request `../../data/planner.db` and download your raw database file.
+- **Impact**: Complete data exfiltration. All tasks, notes, exam schedules, and Pomodoro history exposed.
+- **Fix**: The SPA fallback route in `backend/main.py` already restricts file serving to the `frontend/dist/` directory. Strengthen it by explicitly blocking path traversal:
+
+```python
+@app.get("/{full_path:path}")
+async def serve_spa(full_path: str):
+    # Normalize and verify the path stays within frontend/dist
+    safe_path = os.path.normpath(os.path.join(FRONTEND_DIST, full_path))
+    if not safe_path.startswith(os.path.normpath(FRONTEND_DIST)):
+        return FileResponse(os.path.join(FRONTEND_DIST, "index.html"))
+    if os.path.exists(safe_path) and os.path.isfile(safe_path):
+        return FileResponse(safe_path)
+    return FileResponse(os.path.join(FRONTEND_DIST, "index.html"))
+```
+
+---
+
+#### Vulnerability 11: Stale TLS Certificates
+- **Risk**: Let's Encrypt certificates expire every 90 days. If your renewal cron job fails silently (disk full, DNS misconfiguration, certbot crash), your HTTPS will break. Browsers will show a full-page security warning and refuse to load your planner.
+- **Impact**: Complete service outage until certificate is manually renewed.
+- **Fix**: Caddy handles renewal automatically with zero configuration. If using certbot directly, verify auto-renewal works:
+
+```bash
+# Test renewal without actually renewing
+sudo certbot renew --dry-run
+
+# Verify the systemd timer is active
+systemctl list-timers | grep certbot
+```
+
+---
+
+#### Vulnerability 12: Log File Credential Leaks
+- **Risk**: If your FastAPI logger is set to DEBUG level, request bodies (including your master password in the `/auth/login` POST body) may be written to log files in plaintext.
+- **Impact**: Anyone with read access to your server's log files can extract your password.
+- **Fix**: Run production with `--log-level warning`. If you need request logging for debugging, sanitize sensitive fields:
+
+```python
+import logging
+logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+```
+
+---
+
+### Docker Container Hardening
+
+If you deploy with Docker, apply these security layers to your `Dockerfile`:
+
+```dockerfile
+# Production Dockerfile with security hardening
+FROM python:3.11-slim AS base
+
+# 1. Run as non-root user
+RUN groupadd --gid 1000 appuser && \
+    useradd --uid 1000 --gid appuser --shell /bin/bash --create-home appuser
+
+# 2. Install dependencies as root, then drop privileges
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# 3. Copy application code
+COPY backend/ ./backend/
+COPY frontend/dist/ ./frontend/dist/
+
+# 4. Create data directory owned by appuser
+RUN mkdir -p /data && chown appuser:appuser /data
+
+# 5. Switch to non-root user
+USER appuser
+
+# 6. Health check for container orchestrators
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')" || exit 1
+
+# 7. Read-only filesystem (data volume is the only writable mount)
+ENV DB_PATH=/data/planner.db
+EXPOSE 8000
+CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000", "--log-level", "warning"]
+```
+
+```yaml
+# docker-compose.yml with security flags
+services:
+  planner:
+    build: .
+    read_only: true          # Filesystem is read-only
+    tmpfs:
+      - /tmp:size=10M        # Small writable tmpfs for Python temp files
+    volumes:
+      - planner_data:/data   # Only the data directory is writable
+    ports:
+      - "127.0.0.1:8000:8000"  # Bind to localhost only, not 0.0.0.0
+    environment:
+      - APP_MASTER_PASSWORD=${APP_MASTER_PASSWORD}
+      - JWT_SECRET=${JWT_SECRET}
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true  # Prevent privilege escalation
+
+volumes:
+  planner_data:
+```
+
+---
+
+### Firewall Configuration (UFW on Ubuntu)
+
+If you deploy on a VPS with public ports (Option 3: VPS + Docker + Caddy), lock down all ports except the ones you explicitly need:
+
+```bash
+# Reset to deny-all baseline
+sudo ufw default deny incoming
+sudo ufw default allow outgoing
+
+# Allow SSH (so you don't lock yourself out)
+sudo ufw allow 22/tcp comment "SSH"
+
+# Allow HTTPS only (Caddy serves on 443)
+sudo ufw allow 443/tcp comment "HTTPS via Caddy"
+
+# Allow HTTP temporarily for Let's Encrypt certificate challenges
+sudo ufw allow 80/tcp comment "HTTP for ACME challenges"
+
+# Enable the firewall
+sudo ufw enable
+
+# Verify rules
+sudo ufw status verbose
+```
+
+**Critical**: Port 8000 is intentionally NOT opened. Caddy reverse-proxies external HTTPS traffic to internal `127.0.0.1:8000`. Direct access to port 8000 from the internet is blocked.
+
+If using Tailscale or Cloudflare Tunnel (Options 1 and 2), you do not need to open any ports at all. Deny everything:
+
+```bash
+sudo ufw default deny incoming
+sudo ufw default allow outgoing
+sudo ufw allow 22/tcp comment "SSH"
+sudo ufw enable
+```
+
+---
+
+### Dependency Vulnerability Scanning
+
+Set up automated dependency scanning so you are notified when a library you use has a newly disclosed vulnerability:
+
+#### Option A: GitHub Dependabot (If Repo is on GitHub)
+
+Create `.github/dependabot.yml` in your repository:
+
+```yaml
+version: 2
+updates:
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: "npm"
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+```
+
+GitHub will automatically open pull requests when vulnerable dependency versions are detected.
+
+#### Option B: Manual Scan Before Each Deployment
+
+```bash
+# Run this before every deployment
+echo "=== Python Dependency Audit ==="
+pip-audit --strict
+
+echo "=== Node.js Dependency Audit ==="
+cd frontend && npm audit --audit-level=high && cd ..
+
+echo "=== OS Package Audit ==="
+sudo apt list --upgradable 2>/dev/null | grep -i security
+```
+
+---
+
+### Access Monitoring and Log Review
+
+Without monitoring, you have no way to know if someone is actively trying to break into your planner.
+
+#### Uvicorn Access Logs
+
+Redirect Uvicorn access logs to a file so you can review them:
+
+```bash
+# In your systemd service or docker-compose command:
+uvicorn backend.main:app --host 0.0.0.0 --port 8000 --log-level info --access-log 2>&1 | tee -a /data/logs/access.log
+```
+
+#### Failed Login Monitoring
+
+Add a simple log line to the auth router so failed login attempts are recorded:
+
+```python
+import logging
+logger = logging.getLogger("auth")
+
+# Inside the login route, after password verification fails:
+logger.warning(f"Failed login attempt from IP: {client_ip}")
+```
+
+Review failed attempts periodically:
+
+```bash
+# Count failed login attempts in the last 24 hours
+grep "Failed login" /data/logs/access.log | grep "$(date +%Y-%m-%d)" | wc -l
+
+# Show unique IPs that failed authentication
+grep "Failed login" /data/logs/access.log | grep -oP 'IP: \K[\d.]+' | sort -u
+```
+
+#### Optional: Fail2ban Integration
+
+Fail2ban automatically bans IP addresses that repeatedly fail authentication:
+
+```bash
+sudo apt install fail2ban -y
+```
+
+Create `/etc/fail2ban/jail.local`:
+
+```ini
+[planner-auth]
+enabled = true
+port = 443
+filter = planner-auth
+logpath = /data/logs/access.log
+maxretry = 5
+findtime = 300
+bantime = 3600
+```
+
+Create `/etc/fail2ban/filter.d/planner-auth.conf`:
+
+```ini
+[Definition]
+failregex = Failed login attempt from IP: <HOST>
+ignoreregex =
+```
+
+```bash
+sudo systemctl restart fail2ban
+sudo fail2ban-client status planner-auth
+```
+
+---
+
+## 11. Incident Response: What to Do If Compromised
+
+If you suspect unauthorized access to your planner (unfamiliar tasks appearing, data modified without your action, or suspicious login attempts in logs), follow this procedure immediately:
+
+### Step 1: Contain the Breach (First 5 Minutes)
+
+```bash
+# 1. Block all incoming traffic immediately
+sudo ufw default deny incoming
+sudo ufw reload
+
+# 2. Stop the application
+sudo systemctl stop planner
+# OR if using Docker:
+docker compose down
+
+# 3. If using Cloudflare Tunnel, disable the tunnel in the dashboard
+# If using Tailscale, remove the compromised node from your tailnet
+```
+
+### Step 2: Preserve Evidence
+
+```bash
+# Copy current database and logs to a forensic snapshot directory
+mkdir -p /data/forensic-$(date +%Y%m%d)
+cp /data/planner.db /data/forensic-$(date +%Y%m%d)/
+cp /data/logs/*.log /data/forensic-$(date +%Y%m%d)/
+```
+
+### Step 3: Rotate All Credentials
+
+```bash
+# Generate a new master password (use a password manager)
+# Generate a new JWT secret
+python3 -c "import secrets; print(secrets.token_urlsafe(48))"
+
+# Update .env with new values
+nano /data/.env
+
+# If using SSH keys, rotate them too
+ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_new
+```
+
+### Step 4: Review Logs for Scope of Breach
+
+```bash
+# Check who logged in successfully
+grep "authenticated" /data/forensic-*/access.log
+
+# Check for unusual API access patterns
+grep -E "DELETE|PUT|PATCH" /data/forensic-*/access.log | head -50
+
+# Check SSH login history
+last -20
+grep "Accepted" /var/log/auth.log | tail -20
+```
+
+### Step 5: Restore and Relaunch
+
+```bash
+# 1. Verify your latest backup is clean (compare timestamps with breach timeline)
+sqlite3 /data/backups/planner_YYYYMMDD.db "SELECT COUNT(*) FROM tasks;"
+
+# 2. If the database was tampered with, restore from the last known-good backup
+cp /data/backups/planner_YYYYMMDD.db /data/planner.db
+
+# 3. Rebuild and redeploy with patched dependencies
+pip-audit --fix
+cd frontend && npm audit fix && npm run build && cd ..
+docker compose build --no-cache
+docker compose up -d
+
+# 4. Re-enable firewall with tighter rules
+sudo ufw enable
+```
+
+### Step 6: Post-Incident Hardening
+
+After recovering:
+1. Switch to Tailscale or Cloudflare Tunnel if you were using exposed ports
+2. Enable Fail2ban if not already active
+3. Set up a weekly `pip-audit` and `npm audit` cron job
+4. Review and tighten your Docker security flags (non-root, read-only filesystem, no-new-privileges)
+5. Consider adding a second authentication factor via Cloudflare Access (email OTP or hardware key)
+
+---
+
+## 12. Multi-Device Sync Verification Checklist
 
 - [ ] **Access Gate Check**: Open your URL in an incognito window without authentication. Confirm access is rejected.
 - [ ] **Persistent Storage Test**: Add a task with immediate priority. Restart the cloud container. Verify the task is still there.
@@ -679,3 +1164,7 @@ find "$BACKUP_DIR" -name "planner_*.db.gz" -mtime +14 -delete
 - [ ] **HTTPS Verification**: Confirm that your browser shows the lock icon with a valid SSL/TLS certificate.
 - [ ] **Backup Verification**: Check that daily `.db.gz` snapshots are created and can be read by `sqlite3`.
 - [ ] **Screen-Lock Verification**: Start a 25-minute Pomodoro session on your phone. Lock the phone for 2 minutes. Unlock and verify the remaining time is exactly 23 minutes.
+- [ ] **Firewall Verification**: Run `sudo ufw status` and confirm only ports 22 and 443 are open (or no ports if using Tailscale).
+- [ ] **Non-Root Container Check**: Run `docker exec planner whoami` and confirm it returns `appuser`, not `root`.
+- [ ] **Dependency Scan**: Run `pip-audit` and `npm audit` with zero high-severity findings.
+- [ ] **Failed Login Test**: Attempt 6 wrong passwords from an incognito browser. Confirm the 6th attempt is blocked with HTTP 429.
