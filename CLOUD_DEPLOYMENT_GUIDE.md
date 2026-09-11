@@ -10,6 +10,7 @@ A comprehensive, production-grade guide to deploying Command Planner V9 to the c
 - [2. In-App Authentication: Adding a Single-User Login for Yourself](#2-in-app-authentication-adding-a-single-user-login-for-yourself)
   - [Is It Good to Add In-App Auth Just for Yourself?](#is-it-good-to-add-in-app-auth-just-for-yourself)
   - [Complete Single-User Auth Implementation Blueprint](#complete-single-user-auth-implementation-blueprint)
+  - [Frontend Login Screen Component (LoginModal.tsx)](#3-frontend-login-screen-component-frontendsrccomponentsauthloginmodaltsx)
   - [In-App Auth vs Network Auth (Tailscale / Cloudflare Access)](#in-app-auth-vs-network-auth-tailscale--cloudflare-access)
 - [3. Five Deployment Options Compared](#3-five-deployment-options-compared)
   - [Option 1: Tailscale Private Mesh (Zero Public Exposure)](#option-1-tailscale-private-mesh-zero-public-exposure)
@@ -209,6 +210,97 @@ async def require_auth(request: Request, call_next):
             return JSONResponse(status_code=401, content={"detail": "Authentication required"})
             
     return await call_next(request)
+```
+
+#### 3. Frontend Login Screen Component (`frontend/src/components/auth/LoginModal.tsx`)
+
+A clean, responsive React component that prompts for the master password when unauthenticated:
+
+```tsx
+import React, { useState } from 'react';
+import { Lock, ArrowRight, AlertCircle } from 'lucide-react';
+
+interface LoginModalProps {
+  onSuccess: () => void;
+}
+
+export default function LoginModal({ onSuccess }: LoginModalProps) {
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!password) return;
+    setLoading(true);
+    setError('');
+
+    try {
+      const res = await fetch('/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({ detail: 'Invalid password' }));
+        throw new Error(data.detail || 'Authentication failed');
+      }
+
+      onSuccess();
+    } catch (err: any) {
+      setError(err.message || 'Incorrect master password');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
+      <div className="w-full max-w-md p-8 rounded-2xl bg-[#121624] border border-white/10 shadow-2xl">
+        <div className="flex items-center justify-center w-12 h-12 mb-6 rounded-xl bg-brand-500/10 text-brand-500 mx-auto">
+          <Lock size={24} />
+        </div>
+
+        <h2 className="text-xl font-bold text-center text-white mb-2">
+          Command Planner V9
+        </h2>
+        <p className="text-sm text-center text-white/60 mb-6">
+          Enter your private master password to access your planner.
+        </p>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Master Password"
+              className="w-full px-4 py-3 text-sm rounded-xl bg-white/5 border border-white/10 text-white placeholder-white/30 focus:outline-none focus:border-brand-500 transition-colors"
+              autoFocus
+            />
+          </div>
+
+          {error && (
+            <div className="flex items-center gap-2 text-xs text-danger-500 bg-danger-500/10 p-3 rounded-lg border border-danger-500/20">
+              <AlertCircle size={14} />
+              <span>{error}</span>
+            </div>
+          )}
+
+          <button
+            type="submit"
+            disabled={loading || !password}
+            className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-brand-500 hover:bg-brand-600 font-semibold text-sm text-white transition-all disabled:opacity-50"
+          >
+            <span>{loading ? 'Authenticating...' : 'Unlock Planner'}</span>
+            <ArrowRight size={16} />
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
 ```
 
 ---
