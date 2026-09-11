@@ -9,18 +9,18 @@ from pydantic import BaseModel, Field, field_validator
 # ══════════════════════════════════════════════════════════════════════════
 
 class TaskCreate(BaseModel):
-    text: str
-    priority: str = "Someday"
-    due: str | None = None
-    recur: str = "None"
+    text: str = Field(..., max_length=1000)
+    priority: str = Field(default="Someday", max_length=50)
+    due: str | None = Field(default=None, max_length=20)
+    recur: str = Field(default="None", max_length=20)
     tags: list[str] | None = None
 
 class TaskUpdate(BaseModel):
-    text: str | None = None
-    priority: str | None = None
-    due: str | None = None
+    text: str | None = Field(default=None, max_length=1000)
+    priority: str | None = Field(default=None, max_length=50)
+    due: str | None = Field(default=None, max_length=20)
     done: bool | None = None
-    recur: str | None = None
+    recur: str | None = Field(default=None, max_length=20)
     tags: list[str] | None = None
 
 class TaskResponse(BaseModel):
@@ -54,10 +54,10 @@ class TaskResponse(BaseModel):
 # ══════════════════════════════════════════════════════════════════════════
 
 class TestCreate(BaseModel):
-    subject: str
-    date: str
-    time: str = ""
-    note: str = ""
+    subject: str = Field(..., max_length=200)
+    date: str = Field(..., max_length=20)
+    time: str = Field(default="", max_length=20)
+    note: str = Field(default="", max_length=500)
 
 class TestResponse(BaseModel):
     id: str
@@ -75,17 +75,17 @@ class TestResponse(BaseModel):
 # ══════════════════════════════════════════════════════════════════════════
 
 class AssignmentCreate(BaseModel):
-    subject: str
-    title: str
-    due: str = ""
-    marks: str = ""
+    subject: str = Field(..., max_length=500)
+    title: str = Field(..., max_length=500)
+    due: str = Field(default="", max_length=100)
+    marks: str = Field(default="", max_length=100)
     tags: list[str] | None = None
 
 class AssignmentUpdate(BaseModel):
-    subject: str | None = None
-    title: str | None = None
-    due: str | None = None
-    marks: str | None = None
+    subject: str | None = Field(default=None, max_length=500)
+    title: str | None = Field(default=None, max_length=500)
+    due: str | None = Field(default=None, max_length=100)
+    marks: str | None = Field(default=None, max_length=100)
     submitted: bool | None = None
     tags: list[str] | None = None
 
@@ -120,10 +120,10 @@ class AssignmentResponse(BaseModel):
 # ══════════════════════════════════════════════════════════════════════════
 
 class PracticalCreate(BaseModel):
-    subject: str
-    num: str = ""
-    title: str
-    date: str = ""
+    subject: str = Field(..., max_length=500)
+    num: str = Field(default="", max_length=20)
+    title: str = Field(..., max_length=500)
+    date: str = Field(default="", max_length=20)
 
 class PracticalUpdate(BaseModel):
     performed: bool | None = None
@@ -151,10 +151,10 @@ class PracticalResponse(BaseModel):
 # ══════════════════════════════════════════════════════════════════════════
 
 class ListItemCreate(BaseModel):
-    text: str
+    text: str = Field(..., max_length=1000)
 
 class ListItemUpdate(BaseModel):
-    text: str | None = None
+    text: str | None = Field(default=None, max_length=1000)
     done: bool | None = None
 
 class ListItemResponse(BaseModel):
@@ -165,7 +165,7 @@ class ListItemResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 class ListCreate(BaseModel):
-    name: str
+    name: str = Field(..., max_length=200)
 
 class ListResponse(BaseModel):
     id: str
@@ -180,7 +180,7 @@ class ListResponse(BaseModel):
 # ══════════════════════════════════════════════════════════════════════════
 
 class TopicCreate(BaseModel):
-    name: str
+    name: str = Field(..., max_length=500)
 
 class TopicUpdate(BaseModel):
     done: bool | None = None
@@ -195,7 +195,7 @@ class TopicResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 class SubjectCreate(BaseModel):
-    name: str
+    name: str = Field(..., max_length=200)
 
 class SubjectResponse(BaseModel):
     id: str
@@ -210,12 +210,12 @@ class SubjectResponse(BaseModel):
 # ══════════════════════════════════════════════════════════════════════════
 
 class PomodoroSessionCreate(BaseModel):
-    date: str
-    time: str = ""
-    type: str = "work"
-    task: str = ""
-    duration_min: int = 25
-    start_time: str | None = None  # HH:MM — used to detect midnight-spanning sessions
+    date: str = Field(..., max_length=20)
+    time: str = Field(default="", max_length=20)
+    type: str = Field(default="work", max_length=20)
+    task: str = Field(default="", max_length=200)
+    duration_min: int = Field(default=25, ge=1, le=1440)
+    start_time: str | None = Field(default=None, max_length=20)  # HH:MM — used to detect midnight-spanning sessions
 
 class PomodoroSessionResponse(BaseModel):
     id: str
@@ -234,15 +234,15 @@ class PomodoroSessionResponse(BaseModel):
 # ══════════════════════════════════════════════════════════════════════════
 
 class NoteCreate(BaseModel):
-    title: str = "Untitled"
-    subject: str = "General"
-    body: str = ""
+    title: str = Field(default="Untitled", max_length=500)
+    subject: str = Field(default="General", max_length=200)
+    body: str = Field(default="", max_length=50000)
     tags: list[str] | None = None
 
 class NoteUpdate(BaseModel):
-    title: str | None = None
-    subject: str | None = None
-    body: str | None = None
+    title: str | None = Field(default=None, max_length=500)
+    subject: str | None = Field(default=None, max_length=200)
+    body: str | None = Field(default=None, max_length=50000)
     tags: list[str] | None = None
 
 class NoteResponse(BaseModel):
@@ -274,8 +274,8 @@ class NoteResponse(BaseModel):
 # ══════════════════════════════════════════════════════════════════════════
 
 class SettingUpdate(BaseModel):
-    key: str
-    value: str  # JSON string
+    key: str = Field(..., max_length=100)
+    value: str = Field(..., max_length=10000)  # JSON string
 
 class SettingResponse(BaseModel):
     key: str

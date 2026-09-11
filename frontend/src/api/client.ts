@@ -283,9 +283,26 @@ export const analyticsApi = {
 export const backupApi = {
   list: () => get<BackupInfo[]>('/backup/list'),
   create: () => post<BackupInfo>('/backup/create', {}),
-  restore: (filename: string) => post<{ message: string }>(`/backup/restore?filename=${encodeURIComponent(filename)}`, {}),
-  wipe: () => post<{ message: string }>('/backup/wipe', {}),
+  restore: (filename: string) =>
+    request<{ message: string; safety_backup: string | null }>(
+      `/backup/restore?filename=${encodeURIComponent(filename)}`,
+      {
+        method: 'POST',
+        headers: { 'X-Confirmation-Token': 'CONFIRM-RESTORE-DATABASE' },
+        body: JSON.stringify({}),
+      }
+    ),
+  wipe: () =>
+    request<{ message: string; safety_backup: string | null }>(
+      '/backup/wipe',
+      {
+        method: 'POST',
+        headers: { 'X-Confirmation-Token': 'CONFIRM-WIPE-DATABASE' },
+        body: JSON.stringify({}),
+      }
+    ),
 };
+
 
 // ── Archive ────────────────────────────────────────────────────────────────
 export const archiveApi = {

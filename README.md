@@ -42,6 +42,7 @@ Key features include customizable drag-and-drop dashboard widgets, a global comm
   - [2. Cloud Deployment & Multi-Device Sync Guide](CLOUD_DEPLOYMENT_GUIDE.md)
   - [3. AI Integration Guide (Voice & Natural Language)](AI_INTEGRATION_GUIDE.md)
 - [Repository Structure](#repository-structure)
+- [Changelog](CHANGELOG.md)
 - [License](#license)
 
 ---
@@ -500,6 +501,12 @@ Command-Planner-V9/
     │   │   └── charts/         # Native D3 Kiviat Radar & Heatmap Calendar
     │   └── hooks/              # Custom React hooks
 ```
+
+---
+
+## Changelog
+
+Detailed release notes and a log of all modifications (from minor to major) along with the motivation and outcome/goal for each change are maintained in [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
