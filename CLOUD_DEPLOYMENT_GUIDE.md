@@ -10,7 +10,7 @@ A comprehensive, production-grade guide to deploying Command Planner V9 to the c
 - [2. In-App Authentication: Adding a Single-User Login for Yourself](#2-in-app-authentication-adding-a-single-user-login-for-yourself)
   - [Is It Good to Add In-App Auth Just for Yourself?](#is-it-good-to-add-in-app-auth-just-for-yourself)
   - [Complete Single-User Auth Implementation Blueprint](#complete-single-user-auth-implementation-blueprint)
-  - [Frontend Login Screen Component (LoginModal.tsx)](#3-frontend-login-screen-component-frontendsrccomponentsauthloginmodaltsx)
+  - [Frontend Login Screen Component (LoginModal.tsx)](#frontend-login-screen-component-loginmodaltsx)
   - [In-App Auth vs Network Auth (Tailscale / Cloudflare Access)](#in-app-auth-vs-network-auth-tailscale--cloudflare-access)
 - [3. Five Deployment Options Compared](#3-five-deployment-options-compared)
   - [Option 1: Tailscale Private Mesh (Zero Public Exposure)](#option-1-tailscale-private-mesh-zero-public-exposure)
@@ -27,10 +27,23 @@ A comprehensive, production-grade guide to deploying Command Planner V9 to the c
   - [Mistake 6: Forgetting to Build the Frontend Before Deploying](#mistake-6-forgetting-to-build-the-frontend-before-deploying)
   - [Mistake 7: Process Termination on SSH Disconnect](#mistake-7-process-termination-on-ssh-disconnect)
   - [Mistake 8: Keeping Backups on the Same Virtual Disk](#mistake-8-keeping-backups-on-the-same-virtual-disk)
-- [5. Step-by-Step Setup for Each Deployment Option](#5-step-by-step-setup-for-each-deployment-option)
-- [6. Installing on Mobile Devices (iOS and Android PWA)](#6-installing-on-mobile-devices-ios-and-android-pwa)
-- [7. Automated Off-Site Cloud Backup Pipeline](#7-automated-off-site-cloud-backup-pipeline)
-- [8. Multi-Device Sync Verification Checklist](#8-multi-device-sync-verification-checklist)
+- [5. Migrating Your Existing Local Data to the Cloud](#5-migrating-your-existing-local-data-to-the-cloud)
+- [6. Step-by-Step Setup for Each Deployment Option](#6-step-by-step-setup-for-each-deployment-option)
+  - [Tailscale Private Mesh Setup](#tailscale-private-mesh-setup)
+  - [Free HTTPS on Private Tailscale (tailscale cert)](#free-https-on-private-tailscale-tailscale-cert)
+  - [Cloudflare Zero Trust Tunnel Setup](#cloudflare-zero-trust-tunnel-setup)
+  - [VPS + Docker + Caddy Setup](#vps--docker--caddy-setup)
+  - [Fly.io Edge Deployment Setup](#flyio-edge-deployment-setup)
+  - [Always-Free Cloud Hosting Blueprint ($0.00/Month on Oracle Cloud)](#always-free-cloud-hosting-blueprint-000month-on-oracle-cloud)
+- [7. Real-Time Cross-Device Synchronization](#7-real-time-cross-device-synchronization)
+  - [Level 1: Focus Auto-Refetch (Window Focus Hook)](#level-1-focus-auto-refetch-window-focus-hook)
+  - [Level 2: Background Periodic Polling](#level-2-background-periodic-polling)
+  - [Level 3: Server-Sent Events (SSE) Live Broadcast](#level-3-server-sent-events-sse-live-broadcast)
+- [8. Installing on Mobile Devices (iOS and Android PWA)](#8-installing-on-mobile-devices-ios-and-android-pwa)
+  - [Mobile Screen-Lock and Background Timer Gotchas](#mobile-screen-lock-and-background-timer-gotchas)
+  - [Mobile Safe-Area Insets and Notch Handling (CSS Polish)](#mobile-safe-area-insets-and-notch-handling-css-polish)
+- [9. Automated Off-Site Cloud Backup Pipeline](#9-automated-off-site-cloud-backup-pipeline)
+- [10. Multi-Device Sync Verification Checklist](#10-multi-device-sync-verification-checklist)
 
 ---
 
@@ -378,9 +391,42 @@ export default function LoginModal({ onSuccess }: LoginModalProps) {
 
 ---
 
-## 5. Step-by-Step Setup for Each Deployment Option
+## 5. Migrating Your Existing Local Data to the Cloud
 
-### Option 1: Tailscale Private Mesh (Zero Open Ports)
+If you have already added tasks, exams, practicals, and notes to your local version on your computer (`D:\DAILY PLANNER V9\planner.db`), follow this procedure to transfer your data so you never have to start from scratch:
+
+### Step 1: Export Clean SQLite Snapshot from Your PC
+Before transferring, run SQLite online backup locally to ensure WAL journals are cleanly merged:
+
+```powershell
+# In Windows PowerShell on your PC:
+cd "D:\DAILY PLANNER V9\backend"
+sqlite3 planner.db ".backup 'planner_clean.db'"
+```
+
+### Step 2: Transfer the Database to Your Server via SCP
+Copy the clean snapshot directly to your server's persistent storage volume:
+
+```powershell
+# Replace with your server's username and IP or Tailscale address:
+scp planner_clean.db ubuntu@100.85.20.14:/data/planner.db
+```
+
+### Step 3: Set Correct Permissions on Linux
+SSH into your server and ensure the user running Uvicorn owns the database file:
+
+```bash
+sudo chown ubuntu:ubuntu /data/planner.db
+sudo chmod 660 /data/planner.db
+```
+
+When you start the cloud server, it immediately boots with all your existing tasks, exam countdowns, syllabus progress, and Pomodoro logs intact.
+
+---
+
+## 6. Step-by-Step Setup for Each Deployment Option
+
+### Tailscale Private Mesh Setup
 
 1. **On your server** (Ubuntu/Debian):
    ```bash
@@ -389,7 +435,6 @@ export default function LoginModal({ onSuccess }: LoginModalProps) {
    ```
 2. **Run Command Planner** (via systemd or Docker):
    ```bash
-   # Clone and build
    git clone https://github.com/Rajratna-D/Command-Planner-V9.git
    cd Command-Planner-V9
    cd frontend && npm install && npm run build && cd ..
@@ -402,7 +447,24 @@ export default function LoginModal({ onSuccess }: LoginModalProps) {
 
 ---
 
-### Option 2: Cloudflare Zero Trust Tunnel (Custom Domain + OTP)
+### Free HTTPS on Private Tailscale (tailscale cert)
+
+Mobile browsers require HTTPS for certain progressive web app features. Tailscale provides free automated Let's Encrypt certificates for private MagicDNS domains:
+
+1. On your server, run:
+   ```bash
+   sudo tailscale cert planner-server.your-tailnet.ts.net
+   ```
+   This generates `planner-server.your-tailnet.ts.net.crt` and `planner-server.your-tailnet.ts.net.key`.
+2. Launch Uvicorn with the SSL certificates:
+   ```bash
+   uvicorn backend.main:app --host 0.0.0.0 --port 443 --ssl-keyfile planner-server.your-tailnet.ts.net.key --ssl-certfile planner-server.your-tailnet.ts.net.crt
+   ```
+Now your phone can open `https://planner-server.your-tailnet.ts.net` with full trusted green lock HTTPS and zero security warnings.
+
+---
+
+### Cloudflare Zero Trust Tunnel Setup
 
 1. Install `cloudflared` on your server:
    ```bash
@@ -415,7 +477,7 @@ export default function LoginModal({ onSuccess }: LoginModalProps) {
 
 ---
 
-### Option 3: VPS + Docker + Caddy (Automated HTTPS)
+### VPS + Docker + Caddy Setup
 
 Create `Caddyfile`:
 ```caddy
@@ -427,7 +489,7 @@ Caddy automatically requests, verifies, and renews a free Let's Encrypt SSL cert
 
 ---
 
-### Option 4: Fly.io Edge Deployment
+### Fly.io Edge Deployment Setup
 
 1. Install Flyctl and log in:
    ```bash
@@ -461,13 +523,83 @@ Caddy automatically requests, verifies, and renews a free Let's Encrypt SSL cert
    ```bash
    fly deploy
    ```
-Fly automatically provisions HTTPS on `https://my-command-planner.fly.dev` and shuts down the container when not in use to keep monthly costs near zero.
 
 ---
 
-## 6. Installing on Mobile Devices (iOS and Android PWA)
+### Always-Free Cloud Hosting Blueprint ($0.00/Month on Oracle Cloud)
 
-Command Planner V9 is fully responsive:
+Oracle Cloud Infrastructure (OCI) offers an **Always Free** tier that never expires and requires zero monthly payments:
+
+1. **Sign up**: Create a free tier account at `oracle.com/cloud/free`.
+2. **Launch VM**:
+   - Shape: Choose `VM.Standard.A1.Flex` (Ampere ARM processor).
+   - Resources: Assign 2 OCPU cores and 12GB RAM (completely free forever).
+   - Image: Canonical Ubuntu 22.04 minimal.
+   - Storage: 50GB boot volume (free).
+3. **Configure Security Rules**: In the OCI Console Virtual Cloud Network (VCN), ensure ingress rules allow port 22 (SSH) and port 443 (HTTPS), or leave all ports closed and connect exclusively via Tailscale.
+4. **Deploy App**: Install Docker, clone the repo, attach persistent storage, and launch.
+5. **Result**: A private high-performance cloud instance running your planner 24/7 for $0.00/month.
+
+---
+
+## 7. Real-Time Cross-Device Synchronization
+
+When you make changes on your phone, you want your laptop to show the update without needing a full manual browser refresh:
+
+### Level 1: Focus Auto-Refetch (Window Focus Hook)
+
+Add this lightweight hook to `frontend/src/App.tsx`. Whenever you switch back to your planner tab or wake up your phone screen, it triggers a background refetch:
+
+```tsx
+import { useEffect } from 'react';
+
+export function useWindowFocusRefetch(onRefetch: () => void) {
+  useEffect(() => {
+    const handleFocus = () => {
+      if (document.visibilityState === 'visible') {
+        onRefetch();
+      }
+    };
+
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleFocus);
+
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleFocus);
+    };
+  }, [onRefetch]);
+}
+```
+
+### Level 2: Background Periodic Polling
+
+For multi-monitor setups where you leave the planner open on a second screen while editing from your phone, add a 30-second silent background poll:
+
+```tsx
+useEffect(() => {
+  const timer = setInterval(() => {
+    if (document.visibilityState === 'visible') {
+      // Silently refresh current tab data
+    }
+  }, 30000); // Every 30 seconds
+
+  return () => clearInterval(timer);
+}, []);
+```
+
+### Level 3: Server-Sent Events (SSE) Live Broadcast
+
+For zero-latency live updates:
+1. In `backend/main.py`, create an event broadcast queue using Python's `asyncio.Queue`.
+2. Whenever any POST/PATCH/DELETE route completes, push an invalidation event.
+3. In the React frontend, connect via `new EventSource('/api/events')` to receive instant refresh signals.
+
+---
+
+## 8. Installing on Mobile Devices (iOS and Android PWA)
+
+Command Planner V9 is responsive across all viewport widths:
 
 - **On iPhone / iPad (Safari)**: Open your private URL -> tap **Share** -> tap **Add to Home Screen**.
 - **On Android (Google Chrome)**: Open your private URL -> tap the **three dots** -> tap **Install app**.
@@ -476,7 +608,45 @@ The application launches full-screen with its own app icon and no browser naviga
 
 ---
 
-## 7. Automated Off-Site Cloud Backup Pipeline
+### Mobile Screen-Lock and Background Timer Gotchas
+
+Mobile operating systems aggressively suspend JavaScript execution when the phone screen is locked:
+
+1. **Why V9 Never Loses Time**:
+   - Command Planner V9 uses target-delta mathematics:
+     `remainingSeconds = Math.max(0, Math.round((endTime - Date.now()) / 1000))`
+   - Because it compares against real system time rather than counting clock ticks, when you unlock your phone, the countdown is always accurate.
+2. **Audio Gotcha When Screen Is Locked**:
+   - Mobile Safari and Chrome silence audio synthesizers when the screen turns black to save battery.
+   - **Solution A**: Use the Screen Wake Lock API (`navigator.wakeLock.request('screen')`) during active Pomodoro intervals so your screen stays awake.
+   - **Solution B**: Enable native Web Push notifications with sound triggers so alerts chime on your lock screen.
+
+---
+
+### Mobile Safe-Area Insets and Notch Handling (CSS Polish)
+
+To prevent the top navigation bar from colliding with the iPhone Dynamic Island or Android camera punch-hole in full-screen standalone PWA mode:
+
+1. In `frontend/index.html`, add `viewport-fit=cover`:
+   ```html
+   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+   ```
+2. In `frontend/src/index.css`, apply environment safe-area paddings:
+   ```css
+   header.top-bar {
+     padding-top: max(0.75rem, env(safe-area-inset-top));
+     padding-left: max(1rem, env(safe-area-inset-left));
+     padding-right: max(1rem, env(safe-area-inset-right));
+   }
+
+   nav.bottom-bar {
+     padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+   }
+   ```
+
+---
+
+## 9. Automated Off-Site Cloud Backup Pipeline
 
 Configure a daily cron job that copies your SQLite database using the non-blocking SQLite backup API, compresses it, and syncs it off-site:
 
@@ -501,10 +671,11 @@ find "$BACKUP_DIR" -name "planner_*.db.gz" -mtime +14 -delete
 
 ---
 
-## 8. Multi-Device Sync Verification Checklist
+## 10. Multi-Device Sync Verification Checklist
 
 - [ ] **Access Gate Check**: Open your URL in an incognito window without authentication. Confirm access is rejected.
 - [ ] **Persistent Storage Test**: Add a task with immediate priority. Restart the cloud container. Verify the task is still there.
-- [ ] **Two-Device Real-Time Sync**: Add an exam countdown on your mobile phone. Refresh your desktop browser. Verify the exam countdown appears immediately.
+- [ ] **Two-Device Real-Time Sync**: Add an exam countdown on your mobile phone. Switch tabs on your laptop. Verify the exam countdown appears immediately.
 - [ ] **HTTPS Verification**: Confirm that your browser shows the lock icon with a valid SSL/TLS certificate.
 - [ ] **Backup Verification**: Check that daily `.db.gz` snapshots are created and can be read by `sqlite3`.
+- [ ] **Screen-Lock Verification**: Start a 25-minute Pomodoro session on your phone. Lock the phone for 2 minutes. Unlock and verify the remaining time is exactly 23 minutes.
