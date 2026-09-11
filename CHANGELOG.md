@@ -161,18 +161,21 @@ This release focuses on enterprise-grade security hardening, eliminating four cr
 ### 6. Architecture & Operations Documentation Expansion
 - **Type**: Docs / Minor
 - **Affected Files**:
+  - `README.md` (Updated System Architecture diagram, added 6-layer Security Architecture section, documented `run_production.bat`, and linked guides)
   - `DESKTOP_GUIDE.md` (New comprehensive guide)
   - `CLOUD_DEPLOYMENT_GUIDE.md` (New comprehensive guide)
   - `AI_INTEGRATION_GUIDE.md` (New comprehensive guide)
-  - `README.md` (Updated with architecture links)
 - **What Changed**:
+  - Enhanced `README.md` System Architecture diagram to prominently display the ASGI Security & Middleware Pipeline, input boundary validation, token-gated backup protection, and safety snapshot subsystem.
+  - Added dedicated **Security & Hardening Architecture** section in `README.md` detailing the 6-layer defense model (ASGI size limit, Pydantic bounds, token confirmation, safety backups, 4-layer traversal check, error sanitization).
+  - Documented `run_production.bat` launcher in `README.md` for zero-overhead, secure day-to-day study sessions.
   - Created `DESKTOP_GUIDE.md` (47 KB): Complete manual for PyInstaller/Inno Setup desktop packaging, Windows tray minimization, native notifications, single-instance mutex locking, and auto-updater design.
   - Created `CLOUD_DEPLOYMENT_GUIDE.md` (52 KB): Complete guide for VPS deployment, Oracle Cloud Free Tier setup, Docker multi-stage containers, Nginx reverse proxy with Let's Encrypt SSL, multi-device SQLite sync strategies, and authentication.
   - Created `AI_INTEGRATION_GUIDE.md` (91 KB): Architectural roadmap for productivity analytics ML models, voice-to-text task entry (Whisper), local LLM integration (Ollama / DeepSeek), and Gemini API predictive scheduling.
 - **Reason Behind the Change**:
-  - Need for definitive, production-ready implementation blueprints across desktop distribution, cloud synchronization, and upcoming machine learning features.
+  - The repository documentation needed to fully reflect the newly introduced security architecture, production deployment scripts, and architectural blueprints so users and developers understand the defense-in-depth design.
 - **Outcome / Goal**:
-  - Developers and users have step-by-step instructions to deploy, package, or extend Command Planner without ambiguity.
+  - Complete architectural transparency; users and developers can clearly understand the system topology, security boundaries, and launch options directly from `README.md`.
 
 ---
 

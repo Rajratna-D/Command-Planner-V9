@@ -35,8 +35,12 @@ Key features include customizable drag-and-drop dashboard widgets, a global comm
 - [UI and Workflow Features](#ui-and-workflow-features)
 - [Backend REST API Specification](#backend-rest-api-specification)
 - [Database Architecture & Concurrency](#database-architecture--concurrency)
+- [Security & Hardening Architecture](#security--hardening-architecture)
 - [Automated Testing](#automated-testing)
 - [Installation & Quick Start](#installation--quick-start)
+  - [Development Launch (`run.bat`)](#2-development-launch-windows)
+  - [Production Launch (`run_production.bat`)](#3-hardened-production-launch-windows)
+  - [Manual Setup](#4-manual-setup)
 - [Production Guides & Architectural Manuals](#production-guides--architectural-manuals)
   - [1. Desktop Packaging Guide (Standalone .exe)](DESKTOP_GUIDE.md)
   - [2. Cloud Deployment & Multi-Device Sync Guide](CLOUD_DEPLOYMENT_GUIDE.md)
@@ -91,15 +95,34 @@ Key features include customizable drag-and-drop dashboard widgets, a global comm
 │ [Pages / Views]            [Reusable UI Primitives]           [D3 Visuals]  │
 │ Overview, Tasks, Tests,    Card, Badge, Input, Toast,         Kiviat Radar, │
 │ Pomodoro, Notes, Syllabus  Modal, CommandPalette, RadialBar   52-Wk Heatmap │
-└─────────────────────────────────────┬───────────────────────────────────────┘
+│                                                                             │
+│  ┌───────────────────────────────────────────────────────────────────────┐  │
+│  │                   TYPED REST API CLIENT (client.ts)                   │  │
+│  │    X-Confirmation-Token Headers • Custom Fetch Wrapper • Error Toast  │  │
+│  └──────────────────────────────────┬────────────────────────────────────┘  │
+└─────────────────────────────────────┼───────────────────────────────────────┘
                                       │ HTTP REST API (JSON over Port 8000)
                                       ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                          FASTAPI ASYNC BACKEND                              │
+│                     FASTAPI ASYNC BACKEND & SECURITY LAYER                  │
 │                      Python 3.10+ / 3.14  •  Pydantic v2                    │
 │                                                                             │
 │  ┌───────────────────────────────────────────────────────────────────────┐  │
-│  │                          13 API ROUTERS                               │  │
+│  │                   ASGI SECURITY & MIDDLEWARE PIPELINE                 │  │
+│  │  • BodySizeLimitMiddleware: Rejects requests > 1MB (HTTP 413)         │  │
+│  │  • CORSMiddleware: Cross-Origin Resource Control                      │  │
+│  │  • Global Exception Handler: Sanitizes 500s (Zero Traceback Leakage)  │  │
+│  └──────────────────────────────────┬────────────────────────────────────┘  │
+│                                     ▼                                       │
+│  ┌───────────────────────────────────────────────────────────────────────┐  │
+│  │                   INPUT VALIDATION & SECURITY ENGINES                 │  │
+│  │  • Pydantic v2 Schema Bounds: Field(max_length=...) on all 15 models   │  │
+│  │  • 4-Layer Path Traversal Defense: Regex + Basename + Canonical Check │  │
+│  │  • Automated Safety Backup Subsystem: pre_wipe_*.db & pre_restore_*.db │  │
+│  └──────────────────────────────────┬────────────────────────────────────┘  │
+│                                     ▼                                       │
+│  ┌───────────────────────────────────────────────────────────────────────┐  │
+│  │                             13 API ROUTERS                            │  │
 │  │  /tasks     /tests        /assignments   /practicals    /lists        │  │
 │  │  /syllabus  /pomodoro     /notes         /productivity  /analytics    │  │
 │  │  /archive   /backup       /settings                                   │  │
@@ -107,7 +130,6 @@ Key features include customizable drag-and-drop dashboard widgets, a global comm
 │                                     │ Lifespan Hooks & Startup Auto-Backup  │
 │                                     ▼                                       │
 │                        SQLAlchemy 2.0 ORM Models                            │
-│                                                                             │
 │  • Task     • Test           • Assignment   • Practical    • CheckList      │
 │  • Syllabus • PomodoroSession• Note         • Settings                      │
 └─────────────────────────────────────┬───────────────────────────────────────┘
@@ -246,6 +268,8 @@ The backend exposes an interactive OpenAPI Swagger UI at `http://localhost:8000/
 | **Analytics** | `GET` | `/analytics` | Get 52-week contribution heatmap and peak hours data |
 | **Archive** | `GET / POST` | `/archive` | View all archived items or restore an item |
 | **Backup** | `GET / POST` | `/backup` | List database backups or trigger instant snapshot |
+| | `POST` | `/backup/restore` | Restore database (Requires `X-Confirmation-Token: CONFIRM-RESTORE-DATABASE`) |
+| | `POST` | `/backup/wipe` | Wipe database (Requires `X-Confirmation-Token: CONFIRM-WIPE-DATABASE`) |
 | **Settings** | `GET / PUT` | `/settings` | Read or update application themes and subject colors |
 
 ---
@@ -271,6 +295,77 @@ To import existing records from legacy desktop versions (V1 - V8), run the built
 python -m backend.scripts.migrate_json
 ```
 This migrates records from `planner_data.json` into relational SQLite tables with automatic backup creation.
+
+---
+
+## Security & Hardening Architecture
+
+Command Planner V9 implements an enterprise-grade, **defense-in-depth security model** protecting the system across six distinct layers from the HTTP network boundary to the local SQLite database file:
+
+```
+[ Incoming Request ]
+        │
+        ▼
+[ Layer 1: ASGI Body Size Guard ] ───────> Content-Length > 1MB? ───────> HTTP 413
+        │ (Passed)
+        ▼
+[ Layer 2: CORS & Localhost Binding ] ───> Host: 127.0.0.1 Only (Production)
+        │ (Passed)
+        ▼
+[ Layer 3: Pydantic v2 Schema Bounds ] ──> Input > max_length? ─────────> HTTP 422
+        │ (Passed)
+        ▼
+[ Layer 4: Destructive Token Gate ] ─────> Missing Confirmation Token? ─> HTTP 403
+        │                                  (Auto-Creates pre_wipe_*.db Safety Backup)
+        ▼
+[ Layer 5: Path Traversal Sanitizer ] ───> Non-whitelisted filename? ───> HTTP 400
+        │ (Passed)
+        ▼
+[ Layer 6: Global Exception Guard ] ────> Intercepts 500s (Zero Traceback Disclosure)
+        │
+        ▼
+[ SQLite Database Layer (WAL) ]
+```
+
+### 1. Layer 1 — Request Size Filtering (`BodySizeLimitMiddleware`)
+An ASGI middleware runs before JSON decoding or routing:
+- Inspects incoming `Content-Length` headers.
+- Rejects any payload exceeding **1 MB (1,048,576 bytes)** with `HTTP 413 Request Entity Too Large`.
+- Protects backend memory from Denial of Service (DoS) attacks via oversized JSON payloads.
+
+### 2. Layer 2 — Pydantic Input Boundaries & Data Validation
+Every user-facing field across all 15 Pydantic create/update schemas is bounded:
+- **Tasks & Checklist Items**: Text capped at `1,000` characters (`max_length=1000`).
+- **Descriptions & Notes**: Project descriptions capped at `5,000` characters.
+- **Markdown Notes Studio**: Note body capped at `50,000` characters.
+- **Titles & Subjects**: Bounded to `200`–`500` characters.
+- **Timer Durations**: Strictly constrained between `1` and `1,440` minutes (`ge=1, le=1440`).
+- **Settings Store**: Value capped at `10,000` characters.
+
+### 3. Layer 3 — Token-Gated Destructive Operations & Auto-Safety Backups
+High-risk endpoints cannot be executed without explicit custom confirmation headers:
+- `POST /backup/wipe` requires `X-Confirmation-Token: CONFIRM-WIPE-DATABASE`.
+- `POST /backup/restore` requires `X-Confirmation-Token: CONFIRM-RESTORE-DATABASE`.
+- **Pre-Operation Safety Backups**: Before wiping or restoring, the system automatically creates a timestamped safety snapshot (`pre_wipe_<timestamp>.db` or `pre_restore_<timestamp>.db`). Even if an accidental wipe occurs, zero data loss is incurred.
+
+### 4. Layer 4 — 4-Layer Path Traversal Sanitizer (`_validate_backup_filename`)
+Restore requests undergo strict multi-phase validation:
+1. `os.path.basename()` eliminates directory traversal sequences (`../`, `..\`, `/`, `\`).
+2. Rejects empty or whitespace-only strings.
+3. Regex validation enforces strict whitelist: `^[a-zA-Z0-9_-]+\.db$`.
+4. Canonical boundary check verifies `os.path.commonpath([target, BACKUP_DIR]) == BACKUP_DIR`.
+Tested against 7 attack payloads (`../../etc/passwd`, `..\..\windows\system32\config\sam`, etc.), all returning `HTTP 400 Bad Request`.
+
+### 5. Layer 5 — Error Sanitization & Zero Traceback Disclosure
+- A global `@app.exception_handler(Exception)` intercepts uncaught errors in production.
+- Clients receive a clean `{"detail": "Internal Server Error"}` response.
+- Full tracebacks with source file paths, database structure, and library versions are kept strictly server-side in terminal/logger outputs.
+
+### 6. Layer 6 — Dedicated Production Launcher (`run_production.bat`)
+- Binds FastAPI host strictly to `127.0.0.1` (prevents unintended LAN exposure).
+- Disables `--reload` live file watching to maximize execution speed and minimize overhead.
+- Sets `--log-level warning` to eliminate console noise.
+- Serves optimized production build via Vite preview.
 
 ---
 
@@ -313,14 +408,21 @@ git clone https://github.com/Rajratna-D/Command-Planner-V9.git
 cd Command-Planner-V9
 ```
 
-### 2. One-Click Launch (Windows)
+### 2. Development Launch (Windows)
 Double-click `run.bat` or run from terminal:
 ```cmd
 run.bat
 ```
-`run.bat` verifies available ports, starts the FastAPI backend on port 8000, launches the Vite dev server on port 5173, and opens your default browser.
+`run.bat` verifies available ports, starts the FastAPI backend on port 8000 with `--reload` enabled for live code reloading, launches the Vite dev server on port 5173, and opens your default browser.
 
-### 3. Manual Setup
+### 3. Hardened Production Launch (Windows)
+For day-to-day study sessions with zero debug overhead and complete security isolation:
+```cmd
+run_production.bat
+```
+`run_production.bat` runs the backend with `--log-level warning`, binds strictly to `127.0.0.1` (no external LAN exposure), disables reload overhead, builds the optimized production frontend bundle, and launches the browser.
+
+### 4. Manual Setup
 
 #### Terminal 1: Backend (FastAPI)
 ```bash
