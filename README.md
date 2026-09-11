@@ -38,9 +38,8 @@ Key features include customizable drag-and-drop dashboard widgets, a global comm
 - [Security & Hardening Architecture](#security--hardening-architecture)
 - [Automated Testing](#automated-testing)
 - [Installation & Quick Start](#installation--quick-start)
-  - [Development Launch (`run.bat`)](#2-development-launch-windows)
-  - [Production Launch (`run_production.bat`)](#3-hardened-production-launch-windows)
-  - [Manual Setup](#4-manual-setup)
+  - [Which Launcher Should You Run? (`run.bat` vs `run_production.bat`)](#2-which-launcher-should-you-run-windows)
+  - [Manual Setup](#3-manual-setup)
 - [Production Guides & Architectural Manuals](#production-guides--architectural-manuals)
   - [1. Desktop Packaging Guide (Standalone .exe)](DESKTOP_GUIDE.md)
   - [2. Cloud Deployment & Multi-Device Sync Guide](CLOUD_DEPLOYMENT_GUIDE.md)
@@ -408,21 +407,28 @@ git clone https://github.com/Rajratna-D/Command-Planner-V9.git
 cd Command-Planner-V9
 ```
 
-### 2. Development Launch (Windows)
-Double-click `run.bat` or run from terminal:
-```cmd
-run.bat
-```
-`run.bat` verifies available ports, starts the FastAPI backend on port 8000 with `--reload` enabled for live code reloading, launches the Vite dev server on port 5173, and opens your default browser.
+### 2. Which Launcher Should You Run? (Windows)
 
-### 3. Hardened Production Launch (Windows)
-For day-to-day study sessions with zero debug overhead and complete security isolation:
-```cmd
-run_production.bat
-```
-`run_production.bat` runs the backend with `--log-level warning`, binds strictly to `127.0.0.1` (no external LAN exposure), disables reload overhead, builds the optimized production frontend bundle, and launches the browser.
+Command Planner V9 comes with two one-click batch scripts. Here is how to choose between them:
 
-### 4. Manual Setup
+| If your goal is... | Click this file | Why? |
+|---|---|---|
+| **Everyday study & planning** *(Daily Use)* | **`run_production.bat`** *(Recommended)* | **Faster & lighter**: No background file-watchers eating CPU/RAM, terminal is quiet (`warning` log level), and binds strictly to `127.0.0.1` so nobody on your Wi-Fi can access your data. |
+| **Writing or editing code** *(Development)* | **`run.bat`** | **Hot-reloading**: Automatically restarts the backend server whenever you modify Python files and displays all API logs in the terminal. |
+
+#### Detailed Launcher Comparison
+
+| Feature | `run.bat` (Dev Mode) | `run_production.bat` (Production Mode) |
+|---|---|---|
+| **Backend Hot-Reload** | `--reload` (watches disk constantly) | **Disabled** (saves CPU cycles & RAM) |
+| **Terminal Output** | Verbose (prints every single API request) | **Quiet** (only prints warnings/errors) |
+| **Network Exposure** | Default interface | **`127.0.0.1` only** (safe from local network) |
+| **Browser Launch** | Automatically opens browser | Automatically opens browser |
+| **Best For** | Active development & debugging | Everyday study, Pomodoro, and task planning |
+
+---
+
+### 3. Manual Setup
 
 #### Terminal 1: Backend (FastAPI)
 ```bash
