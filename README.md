@@ -1,4 +1,4 @@
-# ⚡ Command Planner V9  The Full-Stack Academic Productivity Suite
+# Command Planner V9
 
 [![FastAPI](https://img.shields.io/badge/Backend-FastAPI%200.115%2B-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![React 19](https://img.shields.io/badge/Frontend-React%2019.2-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev/)
@@ -11,64 +11,64 @@
 [![Testing](https://img.shields.io/badge/Tests-Pytest%20%7C%20Vitest-0A9EDC?style=for-the-badge&logo=pytest&logoColor=white)](https://docs.pytest.org/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
 
-> **Command Planner V9** represents a quantum leap in academic productivity engineering. Rebuilt from the ground up as a **high-concurrency, modern full-stack web application**, V9 merges a high-performance **FastAPI** backend and **SQLite WAL** persistence with a reactive **React 19, TypeScript, and Tailwind CSS v4** frontend. 
->
-> Featuring drag-and-drop dashboards, a global spotlight command palette (`Ctrl + K`), 15 curated color themes, native D3.js Kiviat radar charts, and an 11-suite automated testing harness.
+**Command Planner V9** is a full-stack academic planning and productivity platform. Built with a **FastAPI** backend, **SQLite WAL** persistence, and a **React 19 + TypeScript + Tailwind CSS v4** frontend.
+
+Key features include customizable drag-and-drop dashboard widgets, a global command palette (`Ctrl + K`), 15 color themes, native D3.js Kiviat radar charts, automated task recurrence, coursework and lab practical tracking, and an automated Pytest test harness.
 
 ---
 
-## 📑 Table of Contents
+## Table of Contents
 
-- [Key Innovations: The Paradigm Shift](#-key-innovations-the-paradigm-shift)
-- [System Architecture](#-system-architecture)
-- [Comprehensive Feature Tour (10 Workstation Modules)](#-comprehensive-feature-tour-10-workstation-modules)
-  - [1. ⬡ Dynamic Overview & Drag-and-Drop Dashboard](#1-⬡-dynamic-overview--drag-and-drop-dashboard)
-  - [2. ◈ Exam & Test Countdown Command](#2-◈-exam--test-countdown-command)
-  - [3. ▣ High-Output Task Engine with Recurrence](#3-▣-high-output-task-engine-with-recurrence)
-  - [4. ◫ Multi-Project Checklists](#4-◫-multi-project-checklists)
-  - [5. ◧ Coursework & Assignment Submission Tracker](#5-◧-coursework--assignment-submission-tracker)
-  - [6. ◩ STEM Laboratory Practicals Lifecycle](#6-◩-stem-laboratory-practicals-lifecycle)
-  - [7. ⬢ Syllabus Coverage & Progress Manager](#7-⬢-syllabus-coverage--progress-manager)
-  - [8. ◎ Deep-Work Pomodoro Workstation](#8--deep-work-pomodoro-workstation)
-  - [9. ✎ Markdown Knowledge Base & Note Studio](#9--markdown-knowledge-base--note-studio)
-  - [10. ◐ Quantitative Focus & Productivity Analytics](#10--quantitative-focus--productivity-analytics)
-- [Cutting-Edge UX & Visual Polish](#-cutting-edge-ux--visual-polish)
-- [Backend REST API Specification (13 APIRouters)](#-backend-rest-api-specification-13-apirouters)
-- [Database Architecture & Data Persistence](#-database-architecture--data-persistence)
-- [Automated Testing & Quality Assurance](#-automated-testing--quality-assurance)
-- [Installation & Quick Start](#-installation--quick-start)
-- [Repository Structure](#-repository-structure)
-- [License & Acknowledgments](#-license--acknowledgments)
+- [Overview: Architecture Evolution (V1 - V8 vs V9)](#overview-architecture-evolution-v1---v8-vs-v9)
+- [System Architecture](#system-architecture)
+- [Core Workstation Modules](#core-workstation-modules)
+  - [1. Dynamic Dashboard](#1-dynamic-dashboard)
+  - [2. Exam & Test Countdown](#2-exam--test-countdown)
+  - [3. Task Engine with Recurrence](#3-task-engine-with-recurrence)
+  - [4. Multi-Project Checklists](#4-multi-project-checklists)
+  - [5. Coursework & Assignment Tracker](#5-coursework--assignment-tracker)
+  - [6. STEM Laboratory Practicals](#6-stem-laboratory-practicals)
+  - [7. Syllabus Coverage Manager](#7-syllabus-coverage-manager)
+  - [8. Deep-Work Pomodoro Timer](#8-deep-work-pomodoro-timer)
+  - [9. Markdown Notes Studio](#9-markdown-notes-studio)
+  - [10. Focus & Productivity Analytics](#10-focus--productivity-analytics)
+- [UI and Workflow Features](#ui-and-workflow-features)
+- [Backend REST API Specification](#backend-rest-api-specification)
+- [Database Architecture & Concurrency](#database-architecture--concurrency)
+- [Automated Testing](#automated-testing)
+- [Installation & Quick Start](#installation--quick-start)
+- [Repository Structure](#repository-structure)
+- [License](#license)
 
 ---
 
-## ⚡ Key Innovations: The Paradigm Shift
+## Overview: Architecture Evolution (V1 - V8 vs V9)
 
 ```
-  DESKTOP MONOLITH (V1–V8)              FULL-STACK WEB PLATFORM (V9)
+  DESKTOP MONOLITH (V1 - V8)            FULL-STACK WEB PLATFORM (V9)
 ┌──────────────────────────┐          ┌───────────────────────────────┐
 │ • Procedural Tkinter/QML │          │ • React 19 + TypeScript + Vite│
-│ • Local JSON storage     │  ═════►  │ • FastAPI + SQLAlchemy 2.0 ORM│
+│ • Local JSON storage     │  =====>  │ • FastAPI + SQLAlchemy 2.0 ORM│
 │ • Single-threaded UI     │          │ • High-Concurrency SQLite WAL │
 │ • Static layout sheets   │          │ • Drag-and-Drop Widgets       │
 │ • Zero automated tests   │          │ • 11 Pytest Integration Suites│
 └──────────────────────────┘          └───────────────────────────────┘
 ```
 
-| Dimension | Legacy Desktop (V1–V8) | Command Planner V9 (Modern Web) |
+| Dimension | Legacy Desktop (V1 - V8) | Command Planner V9 (Modern Web) |
 |---|---|---|
 | **Architecture** | Single-file script (3,000+ lines) | **Decoupled Client-Server REST API** |
 | **Frontend Framework** | CustomTkinter / PySide6 | **React 19 + TypeScript + Vite 6** |
-| **Styling & Design** | Hardcoded Hex Canvas | **Tailwind CSS v4 + 15 Curated Themes** |
+| **Styling & Design** | Hardcoded Canvas / Tk styles | **Tailwind CSS v4 + 15 Curated Themes** |
 | **Database Engine** | Flat `planner_data.json` file | **Relational SQLite with Write-Ahead Logging (WAL)** |
 | **State Management** | Global dictionary reference | **Zustand 5 Stores (`appStore`, `pomodoroStore`)** |
 | **UI Interactivity** | Standard mouse click handlers | **`@dnd-kit` Drag-and-Drop + `Ctrl+K` Command Palette** |
-| **Visualizations** | Matplotlib TkAgg embedding | **Interactive SVG/HTML5 Canvas via D3.js & Recharts** |
-| **Code Testing** | Manual test execution | **Full Automated Pytest & Vitest Suites (100% router coverage)** |
+| **Visualizations** | Matplotlib TkAgg embedding | **Interactive SVG/Canvas via D3.js & Recharts** |
+| **Testing** | Manual execution | **Automated Pytest & Vitest Suites (100% router coverage)** |
 
 ---
 
-## 🏛️ System Architecture
+## System Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -91,7 +91,7 @@
                                       ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                          FASTAPI ASYNC BACKEND                              │
-│                      Python 3.11+ / 3.14  •  Pydantic v2                    │
+│                      Python 3.10+ / 3.14  •  Pydantic v2                    │
 │                                                                             │
 │  ┌───────────────────────────────────────────────────────────────────────┐  │
 │  │                          13 API ROUTERS                               │  │
@@ -102,6 +102,9 @@
 │                                     │ Lifespan Hooks & Startup Auto-Backup  │
 │                                     ▼                                       │
 │                        SQLAlchemy 2.0 ORM Models                            │
+│                                                                             │
+│  • Task     • Test           • Assignment   • Practical    • CheckList      │
+│  • Syllabus • PomodoroSession• Note         • Settings                      │
 └─────────────────────────────────────┬───────────────────────────────────────┘
                                       │ Foreign Keys & WAL Engine
                                       ▼
@@ -115,94 +118,92 @@
 
 ---
 
-## 🔍 Comprehensive Feature Tour (10 Workstation Modules)
+## Core Workstation Modules
 
-### 1. ⬡ Dynamic Overview & Drag-and-Drop Dashboard
-The command center designed for rapid orientation:
-- **Customizable Drag-and-Drop Layout**: Reorder dashboard widgets freely using `@dnd-kit` to suit your individual priority hierarchy.
-- **KPI Real-Time Stat Cards**: Live countdown of urgent tests, pending tasks, unsubmitted assignments, lab practicals, active subjects, and today's Pomodoro sessions.
-- **Critical Action Panels**:
-  - 🔴 **Due Today & Overdue**: Highlights immediate deadlines in high-contrast crimson banners.
-  - 🟡 **Due Tomorrow**: Proactive 24-hour situational awareness display.
-- **Integrated Radial Focus Dial**: Real-time visualization of daily focus session progress toward your target dial.
+### 1. Dynamic Dashboard
+The central dashboard provides quick situational awareness:
+- **Customizable Drag-and-Drop Layout**: Reorder dashboard widgets using `@dnd-kit` to match your workflow.
+- **Real-Time KPI Cards**: Live counters for urgent tests, pending tasks, unsubmitted assignments, lab practicals, active subjects, and today's Pomodoro sessions.
+- **Deadline Monitoring**: Dedicated panels for items due today, overdue items, and tasks due tomorrow.
+- **Radial Focus Dial**: Visual daily tracking toward your target Pomodoro count.
 
-### 2. ◈ Exam & Test Countdown Command
-Eliminate examination surprises with automated date calculations:
-- **Precision Countdown Engine**: Dynamic date mathematics calculating exact days remaining (`TODAY`, `TOMORROW`, `X d`, `PAST`).
-- **Urgency Saturation Tiers**: Color shifts from Green (>7 days) down to Gold (≤7 days), Orange (≤2 days), and Red (0 days).
-- **Comprehensive Metadata**: Tracks course codes, scheduled date, time slots, and syllabus topic scope.
+### 2. Exam & Test Countdown
+Track upcoming examinations and test dates:
+- **Countdown Engine**: Calculates remaining days (`TODAY`, `TOMORROW`, `X d`, `PAST`).
+- **Urgency Tiers**: Visual indicators based on proximity (>7 days, <=7 days, <=2 days, today).
+- **Metadata Tracking**: Course codes, scheduled dates, time slots, and syllabus topic scope.
 
-### 3. ▣ High-Output Task Engine with Recurrence
-Advanced task scheduling built for power users:
-- **5-Tier Priority Hierarchy**:
+### 3. Task Engine with Recurrence
+Organized task management with recurrence:
+- **5 Priority Levels**:
   - `Immediate` (Crimson `#FF4466`)
   - `Important` (Amber `#FF9020`)
-  - `2nd Priority` (Electric Blue `#4D96FF`)
-  - `3rd Priority` (Emerald Green `#2EE87A`)
+  - `2nd Priority` (Blue `#4D96FF`)
+  - `3rd Priority` (Green `#2EE87A`)
   - `Someday` (Muted Slate `#5E6A90`)
-- **Automated Recurrence Engine**: Automatically spawns the next occurrence (`Daily`, `Weekly`, `Monthly`) when a recurring task is checked off.
-- **Tagging & Instant Filtering**: Tag tasks with custom labels (`#exam`, `#urgent`) and filter across priority levels or due dates in real time.
-- **Archive & Strikethrough**: Soft-deletes tasks into an audit-ready archive rather than permanently erasing history.
+- **Automated Recurrence Engine**: Spawns the next occurrence (Daily, Weekly, Monthly) when a recurring task is completed.
+- **Tagging and Instant Filtering**: Filter by custom tags (`#exam`, `#urgent`), priority levels, or due dates in real time.
+- **Soft Deletion**: Archives completed or removed tasks with full restore support.
 
-### 4. ◫ Multi-Project Checklists
-Ad-hoc sprint trackers and project roadmaps:
-- Create custom named checklists with responsive completion ratio bars (`X / Y`).
-- Item drag-and-drop reordering with keyboard navigation accessibility.
+### 4. Multi-Project Checklists
+Sprint checklists and project sub-tasks:
+- Create named checklists with responsive completion ratio bars (`X / Y`).
+- Item drag-and-drop reordering with keyboard navigation support.
 
-### 5. ◧ Coursework & Assignment Submission Tracker
-Academic submission lifecycle manager:
-- Monitor course codes, assignment titles, deadlines, and grade weightages.
-- Instant overdue flags with countdown warnings.
-- One-click **✓ SUBMITTED** transition archiving submissions into a verified completed drawer.
+### 5. Coursework & Assignment Tracker
+Track coursework submissions and academic deliverables:
+- Monitor course codes, assignment titles, deadlines, and grade weightings.
+- Overdue alerts with countdown warnings.
+- One-click submission tracking with archived completed history.
 
-### 6. ◩ STEM Laboratory Practicals Lifecycle
-Purpose-built for engineering, medical, and scientific curricula:
+### 6. STEM Laboratory Practicals
+Designed for engineering, medical, and science curricula:
 - Tracks Experiment Number, Title, Subject, and Lab Date.
 - **Three-Stage Milestone Verification**:
-  - `[P]` **Performed**: Hands-on lab work completed.
-  - `[W]` **Writeup Done**: Observation journal and calculations verified.
+  - `[P]` **Performed**: Laboratory experiment conducted.
+  - `[W]` **Writeup Done**: Observation journal and calculations completed.
   - `[S]` **Submitted**: Journal evaluated and signed off by instructor.
-- Automated completion detection once all three states are checked.
+- Automatic completion status when all three milestones are met.
 
-### 7. ⬢ Syllabus Coverage & Progress Manager
-Complete curriculum coverage tracker:
-- Multi-subject creation with customizable subject color badges.
+### 7. Syllabus Coverage Manager
+Structured syllabus tracking across courses:
+- Multi-subject management with custom color badges.
 - Hierarchical breakdown into units and individual topics.
-- Interactive topic states (`Pending`, `In Progress`, `Completed`) automatically updating live percentage progress bars.
+- Interactive topic states (`Pending`, `In Progress`, `Completed`) with automatic progress percentage calculation.
 
-### 8. ◎ Deep-Work Pomodoro Workstation
-Zero-friction focus timer:
-- **Configurable Work/Break Cycles**: Default 25-minute focus session, 5-minute short break, and 15-minute long break after 4 sessions.
-- **Active Task Association**: Link the running timer directly to any open task from the task queue.
+### 8. Deep-Work Pomodoro Timer
+Focused work session timer:
+- **Configurable Work/Break Intervals**: Default 25-minute focus session, 5-minute short break, and 15-minute long break after 4 sessions.
+- **Active Task Association**: Link the running timer directly to any task in your backlog.
 - **Web Audio Engine**: Native browser audio generation outputs acoustic chimes upon session completion without external audio files.
-- **Session Audit History**: Comprehensive chronological log tracking session duration, start times, and linked tasks.
+- **Session Audit History**: Comprehensive chronological log tracking session durations, start timestamps, and linked tasks.
 
-### 9. ✎ Markdown Knowledge Base & Note Studio
+### 9. Markdown Notes Studio
 Integrated split-pane note-taking studio:
-- **Master-Detail Layout**: Categorized note list on the left with instant search; full editor on the right.
+- **Master-Detail Layout**: Categorized note list on the left with instant search; full editor and markdown preview on the right.
 - **Markdown & Tagging**: Full Markdown rendering support with multi-tag filtering.
 - **Audit Metadata**: Automatic tracking of creation timestamps and last-edited metadata.
 
-### 10. ◐ Quantitative Focus & Productivity Analytics
-Scientific performance metrics powered by D3.js and Recharts:
+### 10. Focus & Productivity Analytics
+Quantitative productivity metrics powered by D3.js and Recharts:
 - **Daily Target Dial**: Set personal goals for sessions per day (default: 6 sessions).
-- **Dynamic Productivity Score**: Algorithmic score calculated from daily output (0–100) with rating bands (*EXCELLENT*, *GOOD*, *AVERAGE*, *NEEDS WORK*).
-- **52-Week Focus Contribution Heatmap**: Full-year GitHub-style activity grid rendered natively in D3 with 4-level color saturation and month labels.
-- **Dual-Week Kiviat Radar Chart**: 7 radial axes (Mon–Sun) comparing this week's focus distribution against last week's baseline with glowing paths and vertex halos.
-- **Peak Focus Hours Bar Graph**: 24-hour distribution identifying your most productive times of day.
+- **Dynamic Productivity Score**: Algorithmic score calculated from daily completion metrics (scale: 0 - 100) with performance bands (Excellent, Good, Average, Needs Work).
+- **52-Week Focus Contribution Heatmap**: Full-year activity grid rendered in D3 with 4-level color saturation and month labels.
+- **Dual-Week Kiviat Radar Chart**: 7 radial axes (Mon - Sun) comparing current week focus hours against prior week baseline.
+- **Peak Focus Hours Bar Graph**: 24-hour distribution identifying your most productive hours of the day.
 
 ---
 
-## 🎨 Cutting-Edge UX & Visual Polish
+## UI and Workflow Features
 
-### 1. Global Spotlight Command Palette (`Ctrl + K`)
-Press **`Ctrl + K`** (or `Cmd + K` on macOS) anywhere in the application to summon the instant spotlight:
+### Global Command Palette (`Ctrl + K`)
+Press **`Ctrl + K`** (or `Cmd + K` on macOS) anywhere in the application to summon the spotlight command palette:
 - Jump to any page or module instantaneously.
 - Search tasks, notes, and syllabus topics globally.
-- Trigger one-click actions (start Pomodoro, toggle theme, trigger manual backup).
+- Trigger actions (start Pomodoro, switch themes, trigger manual backup).
 
-### 2. 15 Curated Color Themes
-Switch between 15 meticulously tailored themes via the settings panel or command palette:
+### 15 Curated Color Themes
+Switch between 15 built-in themes via the settings panel or command palette:
 ```
 • Light        • Dark (PrinceBlue)   • OLED (Pure Pitch)   • Nord (Arctic Frost)
 • Cyberpunk    • Sepia (Vintage)     • Sakura (Pastel)     • Forest (Emerald)
@@ -210,14 +211,14 @@ Switch between 15 meticulously tailored themes via the settings panel or command
 • Abyss        • Lavender            • Monokai (Dev Pro)
 ```
 
-### 3. Unified Soft-Delete Archive
-Accidentally deleted a task, note, or assignment? V9 introduces an integrated `/archive` system that moves deleted entities into a soft-delete trash bin, allowing 1-click restoration or permanent purging.
+### Unified Soft-Delete Archive
+Accidentally deleted a task, note, or assignment? V9 includes an integrated `/archive` system that moves deleted entities into a soft-delete trash bin, allowing 1-click restoration or permanent deletion.
 
 ---
 
-## 🔌 Backend REST API Specification (13 APIRouters)
+## Backend REST API Specification
 
-The backend exposes an interactive **Swagger UI** at `http://localhost:8000/docs`:
+The backend exposes an interactive OpenAPI Swagger UI at `http://localhost:8000/docs`:
 
 | Router | Method | Endpoint | Description |
 |---|---|---|---|
@@ -225,7 +226,7 @@ The backend exposes an interactive **Swagger UI** at `http://localhost:8000/docs
 | | `PATCH / DELETE` | `/tasks/{id}` | Update task state, toggle completion, or archive |
 | **Tests** | `GET / POST` | `/tests` | Fetch test schedule or schedule a new exam |
 | | `DELETE` | `/tests/{id}` | Remove scheduled test |
-| **Assignments**| `GET / POST` | `/assignments` | List coursework or create assignment |
+| **Assignments** | `GET / POST` | `/assignments` | List coursework or create assignment |
 | | `PATCH / DELETE` | `/assignments/{id}` | Submit assignment or archive |
 | **Practicals** | `GET / POST` | `/practicals` | List lab practicals or create new practical |
 | | `PATCH` | `/practicals/{id}` | Toggle `performed`, `writeup`, or `submitted` |
@@ -236,7 +237,7 @@ The backend exposes an interactive **Swagger UI** at `http://localhost:8000/docs
 | **Pomodoro** | `GET / POST` | `/pomodoro` | Fetch daily session log or record new session |
 | **Notes** | `GET / POST` | `/notes` | Search notes or create new note |
 | | `PATCH / DELETE` | `/notes/{id}` | Update note body/tags or archive |
-| **Productivity**| `GET` | `/productivity` | Get daily score, streak counter, and Kiviat chart metrics |
+| **Productivity** | `GET` | `/productivity` | Get daily score, streak counter, and Kiviat chart metrics |
 | **Analytics** | `GET` | `/analytics` | Get 52-week contribution heatmap and peak hours data |
 | **Archive** | `GET / POST` | `/archive` | View all archived items or restore an item |
 | **Backup** | `GET / POST` | `/backup` | List database backups or trigger instant snapshot |
@@ -244,35 +245,35 @@ The backend exposes an interactive **Swagger UI** at `http://localhost:8000/docs
 
 ---
 
-## 💾 Database Architecture & Data Persistence
+## Database Architecture & Concurrency
 
-### Safe Concurrency (SQLite WAL Mode)
-Command Planner V9 configures SQLite with industry-standard concurrency pragmas on engine connect:
+### SQLite WAL Mode
+Command Planner V9 configures SQLite with concurrency pragmas on engine connection:
+
 ```python
 @event.listens_for(engine, "connect")
 def set_sqlite_pragma(dbapi_connection, connection_record):
     cursor = dbapi_connection.cursor()
     cursor.execute("PRAGMA journal_mode=WAL")       # Non-blocking concurrent reads & writes
-    cursor.execute("PRAGMA synchronous=NORMAL")     # Safe, high-performance flushing
-    cursor.execute("PRAGMA foreign_keys=ON")        # Strict relational integrity
+    cursor.execute("PRAGMA synchronous=NORMAL")     # Safe, balanced disk flushing
+    cursor.execute("PRAGMA foreign_keys=ON")        # Relational foreign key integrity
     cursor.close()
 ```
 
-### Seamless Historical Migration (`migrate_json.py`)
-To upgrade seamlessly from desktop versions (V1–V8), run the built-in migration bridge:
+### Historical Data Migration (`migrate_json.py`)
+To import existing records from legacy desktop versions (V1 - V8), run the built-in migration script:
 ```bash
 python -m backend.scripts.migrate_json
 ```
-This automatically converts your existing `planner_data.json` into relational SQLite tables with automatic backup preservation.
+This migrates records from `planner_data.json` into relational SQLite tables with automatic backup creation.
 
 ---
 
-## 🧪 Automated Testing & Quality Assurance
+## Automated Testing
 
-Command Planner V9 is fully backed by **11 Pytest integration suites** verifying every single API router and database operation:
+Command Planner V9 includes **11 Pytest integration suites** covering API routers and database operations:
 
 ```bash
-# Run the complete backend test suite
 pytest backend/tests -v
 ```
 
@@ -294,10 +295,10 @@ backend/tests/test_backup.py .......                                     [100%]
 
 ---
 
-## 🚀 Installation & Quick Start
+## Installation & Quick Start
 
 ### Prerequisites
-- **Python 3.10+** (Python 3.11, 3.12, 3.13, or 3.14)
+- **Python 3.10+** (Python 3.10, 3.11, 3.12, 3.13, or 3.14)
 - **Node.js 18+** & npm / pnpm
 - Git
 
@@ -307,20 +308,20 @@ git clone https://github.com/Rajratna-D/Command-Planner-V9.git
 cd Command-Planner-V9
 ```
 
-### 2. Automated One-Click Launch (Windows)
-Double-click **`run.bat`** or run:
+### 2. One-Click Launch (Windows)
+Double-click `run.bat` or run from terminal:
 ```cmd
 run.bat
 ```
-*`run.bat` automatically handles port conflict detection, boots the FastAPI backend on port 8000, launches the Vite dev server on port 5173, and opens your default browser!*
+`run.bat` verifies available ports, starts the FastAPI backend on port 8000, launches the Vite dev server on port 5173, and opens your default browser.
 
-### 3. Manual Step-by-Step Setup
+### 3. Manual Setup
 
-#### Terminal 1 — Backend (FastAPI)
+#### Terminal 1: Backend (FastAPI)
 ```bash
-# Set up Python virtual environment
+# Create virtual environment
 python -m venv .venv
-source .venv/bin/activate    # Linux / macOS
+source .venv/bin/activate       # Linux / macOS
 # or: .\.venv\Scripts\activate  # Windows
 
 # Install backend dependencies
@@ -329,9 +330,9 @@ pip install fastapi uvicorn sqlalchemy pydantic
 # Start FastAPI server
 uvicorn backend.main:app --port 8000 --reload
 ```
-*API will be live at `http://localhost:8000` (Swagger docs at `http://localhost:8000/docs`).*
+API endpoint: `http://localhost:8000` (Interactive docs: `http://localhost:8000/docs`).
 
-#### Terminal 2 — Frontend (React + Vite)
+#### Terminal 2: Frontend (React + Vite)
 ```bash
 cd frontend
 
@@ -341,60 +342,58 @@ npm install
 # Start Vite dev server
 npm run dev
 ```
-*Web application will be live at `http://localhost:5173`.*
+Web client: `http://localhost:5173`.
 
 ---
 
-## 📁 Repository Structure
+## Repository Structure
 
 ```
 Command-Planner-V9/
-├── README.md                   # 10x Master Product Documentation
+├── README.md                   # Project documentation
 ├── LICENSE                     # MIT License
-├── run.bat                     # One-Click Full-Stack Windows Launcher
-├── .gitignore                  # Strict Zero-Data-Leak Privacy Filter
+├── run.bat                     # Windows startup launcher
+├── .gitignore                  # Git ignore rules
 │
 ├── backend/                    # FastAPI Backend Application
-│   ├── main.py                 # ASGI Entry Point, CORS & Lifespan Hooks
-│   ├── database.py             # SQLite WAL Connection & Auto-Migrations
-│   ├── models/                 # SQLAlchemy 2.0 Relational ORM Models
+│   ├── main.py                 # ASGI entry point, CORS & lifespan hooks
+│   ├── database.py             # SQLite WAL connection & auto-migrations
+│   ├── models/                 # SQLAlchemy 2.0 relational ORM models
 │   │   ├── task.py             # Task entity with recurrence & tags
 │   │   ├── test.py             # Examination countdown entity
 │   │   ├── assignment.py       # Coursework submission entity
-│   │   ├── practical.py        # 3-Stage laboratory entity
+│   │   ├── practical.py        # 3-stage laboratory entity
 │   │   ├── list_model.py       # Multi-project checklist models
 │   │   ├── syllabus.py         # Course curriculum tree models
 │   │   ├── pomodoro.py         # Session history audit entity
 │   │   ├── note.py             # Markdown note entity with tags
 │   │   └── settings.py         # User configuration entity
 │   ├── routers/                # 13 RESTful APIRouters
-│   ├── schemas/                # Pydantic v2 Validation Schemas
-│   ├── scripts/                # Data Migration Tools (migrate_json.py)
-│   └── tests/                  # 11 Automated Pytest Test Suites
+│   ├── schemas/                # Pydantic v2 validation schemas
+│   ├── scripts/                # Data migration tools (migrate_json.py)
+│   └── tests/                  # 11 Pytest test suites
 │
 └── frontend/                   # React 19 + TypeScript Application
-    ├── package.json            # Node.js Dependencies & Build Scripts
-    ├── vite.config.ts          # Vite 6 Bundler Configuration
+    ├── package.json            # Dependencies & scripts
+    ├── vite.config.ts          # Vite 6 bundler configuration
     ├── src/
-    │   ├── main.tsx            # React Root DOM Mount
-    │   ├── App.tsx             # Application Shell & Lazy Page Router
-    │   ├── types.ts            # Centralized TypeScript Type Definitions
-    │   ├── api/client.ts       # Typed Axios / Fetch REST API Client
-    │   ├── store/              # Zustand 5 Global State Stores
-    │   │   ├── appStore.ts     # Theme, Active Tab, Toast Stack
-    │   │   └── pomodoroStore.ts# Live Timer & Interval Logic
-    │   ├── pages/              # 11 Modular Full-Screen Workstation Views
-    │   ├── components/         # Reusable UI & Chart Component Library
+    │   ├── main.tsx            # React root mount
+    │   ├── App.tsx             # Application shell & router
+    │   ├── types.ts            # Centralized TypeScript definitions
+    │   ├── api/client.ts       # Typed REST API client
+    │   ├── store/              # Zustand 5 global state stores
+    │   │   ├── appStore.ts     # Theme, active tab, toast state
+    │   │   └── pomodoroStore.ts# Live timer & interval logic
+    │   ├── pages/              # 11 Modular workstation views
+    │   ├── components/         # UI & chart component library
     │   │   ├── ui/             # Card, Badge, Input, Toast, Modals
     │   │   ├── layout/         # Sidebar, TopBar, CommandPalette
     │   │   └── charts/         # Native D3 Kiviat Radar & Heatmap Calendar
-    │   └── hooks/              # Custom React Hooks (Shortcuts, Pomodoro)
+    │   └── hooks/              # Custom React hooks
 ```
 
 ---
 
-## 📄 License & Acknowledgments
+## License
 
-This project is licensed under the [MIT License](LICENSE) — see the LICENSE file for details.
-
-Developed with architectural precision for high-output students, researchers, and engineers.
+This project is licensed under the [MIT License](LICENSE): see [LICENSE](LICENSE) for details.
