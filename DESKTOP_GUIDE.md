@@ -29,7 +29,16 @@ A comprehensive, production-grade manual for packaging Command Planner V9 into a
   - [Pitfall 2: Hardcoded Port Conflicts](#pitfall-2-hardcoded-port-conflicts)
   - [Pitfall 3: Antivirus Heuristics with onefile](#pitfall-3-antivirus-heuristics-with-onefile)
   - [Pitfall 4: SPA Refresh Routing 404s](#pitfall-4-spa-refresh-routing-404s)
-- [8. Desktop Verification Checklist](#8-desktop-verification-checklist)
+- [8. Native Desktop Polish & Advanced Features](#8-native-desktop-polish--advanced-features)
+  - [8.1 Single-Instance Lock (Preventing Duplicate App Launches)](#81-single-instance-lock-preventing-duplicate-app-launches)
+  - [8.2 Custom Icons on Taskbar and Executable](#82-custom-icons-on-taskbar-and-executable)
+  - [8.3 System Tray Minimization (Keep Timers Running in Background)](#83-system-tray-minimization-keep-timers-running-in-background)
+  - [8.4 Native Windows Action Center Notifications](#84-native-windows-action-center-notifications)
+  - [8.5 Launch on Windows Startup (Run at Boot)](#85-launch-on-windows-startup-run-at-boot)
+  - [8.6 Global Hotkey Summon (Ctrl + Shift + P)](#86-global-hotkey-summon-ctrl--shift--p)
+- [9. Professional Windows Installer Creation (Inno Setup)](#9-professional-windows-installer-creation-inno-setup)
+- [10. Safe Application Updates Without Data Loss](#10-safe-application-updates-without-data-loss)
+- [11. Desktop Verification Checklist](#11-desktop-verification-checklist)
 
 ---
 
@@ -284,7 +293,7 @@ if %ERRORLEVEL% NEQ 0 (
 :: 4. Completion
 echo.
 echo [4/4] Build complete!
-echo Executable located at: dist\\CommandPlannerV9\\CommandPlannerV9.exe
+echo Executable located at: dist\CommandPlannerV9\CommandPlannerV9.exe
 echo =========================================================
 pause
 ```
@@ -330,11 +339,9 @@ function startBackend() {
   let pythonPath = process.platform === 'win32' ? '.venv/Scripts/python.exe' : '.venv/bin/python';
 
   if (!isDev) {
-    // In production, invoke bundled Python binary
     pythonPath = path.join(process.resourcesPath, 'backend_dist', 'backend.exe');
     backendProcess = spawn(pythonPath, [], { stdio: 'ignore' });
   } else {
-    // In development, invoke local virtualenv
     backendProcess = spawn(pythonPath, ['-m', 'uvicorn', 'backend.main:app', '--port', '8000', '--host', '127.0.0.1']);
   }
 }
@@ -466,14 +473,12 @@ When Wi-Fi or Ethernet is disconnected, Windows reports `navigator.onLine = fals
 Remove the `!navigator.onLine` conditional check in `frontend/src/api/client.ts`. Send local fetch requests directly. Only consider the connection failed if the `fetch()` call itself rejects (which only occurs if the local Python process is terminated):
 
 ```typescript
-// Bypasses the Wi-Fi check so localhost communication functions normally:
 try {
   res = await fetch(`${BASE}${path}`, {
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     ...options,
   });
 } catch (networkErr) {
-  // Only triggered if port 8000 is not responding:
   if (isGet && typeof window !== 'undefined') {
     const raw = localStorage.getItem(`cp-cache-${path}`);
     if (raw) return JSON.parse(raw);
@@ -533,13 +538,290 @@ When operating on an isolated PC with no internet:
 
 ---
 
-## 8. Desktop Verification Checklist
+## 8. Native Desktop Polish & Advanced Features
+
+### 8.1 Single-Instance Lock (Preventing Duplicate App Launches)
+
+If a user double-clicks the application icon while it is already running, starting a second backend instance causes port collisions and file locking errors.
+
+Implement a named mutex in `desktop.py` to ensure only one instance runs at a time:
+
+```python
+import sys
+import ctypes
+from ctypes import wintypes
+
+def acquire_single_instance_lock(app_guid="{B49F7D21-8E14-4A3E-9A5C-9A92E86D1234}"):
+    # Uses a Windows named mutex to prevent duplicate instances
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    CreateMutexW = kernel32.CreateMutexW
+    CreateMutexW.argtypes = [wintypes.LPVOID, wintypes.BOOL, wintypes.LPCWSTR]
+    CreateMutexW.restype = wintypes.HANDLE
+    
+    mutex_handle = CreateMutexW(None, False, app_guid)
+    last_error = ctypes.get_last_error()
+    
+    ERROR_ALREADY_EXISTS = 183
+    if last_error == ERROR_ALREADY_EXISTS:
+        # Another instance is already running
+        return None
+    return mutex_handle
+
+# Inside desktop.py main():
+lock = acquire_single_instance_lock()
+if not lock:
+    print("Command Planner V9 is already running.")
+    sys.exit(0)
+```
+
+---
+
+### 8.2 Custom Icons on Taskbar and Executable
+
+To give the application a professional icon across Windows File Explorer, the Alt+Tab switcher, and the taskbar:
+
+1. Create or place a multi-size icon file at `assets/icon.ico` (containing 16x16, 32x32, 48x48, and 256x256 pixel sizes).
+2. Pass the `--icon` parameter to PyInstaller:
+   ```cmd
+   pyinstaller --onedir --windowed --icon "assets/icon.ico" desktop.py
+   ```
+3. Set the Windows AppUserModelID in Python so the taskbar groups properly:
+   ```python
+   # Inside desktop.py:
+   import ctypes
+   myappid = "rajratna.commandplanner.v9.desktop"
+   ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+   ```
+
+---
+
+### 8.3 System Tray Minimization (Keep Timers Running in Background)
+
+When a student or engineer is running a Pomodoro session, closing the window should not terminate the timer. The app should minimize to the Windows System Tray (next to the clock).
+
+Install `pystray` and `pillow`:
+```bash
+pip install pystray pillow
+```
+
+Add system tray management to `desktop.py`:
+
+```python
+import pystray
+from PIL import Image
+import threading
+
+def create_system_tray(window):
+    image = Image.open("assets/icon.ico")
+    
+    def on_show(icon, item):
+        window.show()
+        window.restore()
+
+    def on_hide(icon, item):
+        window.hide()
+
+    def on_quit(icon, item):
+        icon.stop()
+        window.destroy()
+        sys.exit(0)
+
+    menu = pystray.Menu(
+        pystray.MenuItem("Open Command Planner", on_show, default=True),
+        pystray.MenuItem("Hide to Tray", on_hide),
+        pystray.MenuItem("Exit Completely", on_quit)
+    )
+    
+    tray_icon = pystray.Icon("CommandPlannerV9", image, "Command Planner V9", menu)
+    tray_icon.run()
+
+# Run the tray icon in a dedicated daemon thread:
+threading.Thread(target=create_system_tray, args=(window,), daemon=True).start()
+```
+
+---
+
+### 8.4 Native Windows Action Center Notifications
+
+When Command Planner V9 is minimized, desktop alerts (Pomodoro interval complete, overdue coursework, upcoming exam) should trigger native Windows notifications:
+
+Because Microsoft Edge WebView2 supports the HTML5 Notification API natively, no third-party libraries are required in the frontend:
+
+```typescript
+// In frontend/src/utils/notifications.ts:
+export function showDesktopNotification(title: string, body: string) {
+  if (!('Notification' in window)) return;
+
+  if (Notification.permission === 'granted') {
+    new Notification(title, {
+      body,
+      icon: '/assets/icon.png',
+    });
+  } else if (Notification.permission !== 'denied') {
+    Notification.requestPermission().then((permission) => {
+      if (permission === 'granted') {
+        new Notification(title, { body, icon: '/assets/icon.png' });
+      }
+    });
+  }
+}
+```
+
+Windows displays this notification in the bottom-right corner and stores it in the Action Center.
+
+---
+
+### 8.5 Launch on Windows Startup (Run at Boot)
+
+To automatically launch Command Planner V9 when logging into Windows:
+
+#### Method A: User Startup Folder (Zero Admin Privileges Required)
+Create a `.bat` or shortcut in the user's startup folder:
+```cmd
+:: Path to Windows Startup Folder:
+%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\CommandPlannerV9.lnk
+```
+
+#### Method B: Windows Registry Toggle via Python
+```python
+import winreg
+import os
+import sys
+
+def set_run_at_startup(enable=True):
+    key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
+    app_name = "CommandPlannerV9"
+    exe_path = os.path.abspath(sys.argv[0])
+    
+    try:
+        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_SET_VALUE)
+        if enable:
+            winreg.SetValueEx(key, app_name, 0, winreg.REG_SZ, f'"{exe_path}"')
+        else:
+            winreg.DeleteValue(key, app_name)
+        winreg.CloseKey(key)
+    except Exception as e:
+        print(f"Startup registry error: {e}")
+```
+
+---
+
+### 8.6 Global Hotkey Summon (Ctrl + Shift + P)
+
+Pressing a global keyboard combination anywhere in Windows to instantly bring Command Planner V9 to the front:
+
+```python
+import keyboard
+
+def register_summon_hotkey(window):
+    def toggle_window():
+        # Bring window to front or minimize if already active
+        window.show()
+        window.restore()
+    
+    keyboard.add_hotkey("ctrl+shift+p", toggle_window)
+
+# In desktop.py:
+threading.Thread(target=register_summon_hotkey, args=(window,), daemon=True).start()
+```
+
+---
+
+## 9. Professional Windows Installer Creation (Inno Setup)
+
+To package your compiled `dist/CommandPlannerV9/` directory into a single, polished setup installer (`CommandPlannerV9_Setup.exe`):
+
+1. Download and install [Inno Setup](https://jrsoftware.org/isinfo.php) (Free, industry standard).
+2. Create `installer.iss` in your project root:
+
+```pascal
+[Setup]
+AppId={{C8E29B12-9F14-4B3E-8D5C-2A92E86D9876}
+AppName=Command Planner V9
+AppVersion=9.0.0
+AppPublisher=Rajratna Dhiwar
+DefaultDirName={autopf}\Command Planner V9
+DefaultGroupName=Command Planner V9
+OutputDir=dist-installer
+OutputBaseFilename=CommandPlannerV9_Setup
+Compression=lzma2/ultra64
+SolidCompression=yes
+PrivilegesRequired=lowest
+SetupIconFile=assets\icon.ico
+UninstallDisplayIcon={app}\CommandPlannerV9.exe
+
+[Tasks]
+Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
+
+[Files]
+Source: "dist\CommandPlannerV9\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+[Icons]
+Name: "{group}\Command Planner V9"; Filename: "{app}\CommandPlannerV9.exe"
+Name: "{group}\Uninstall Command Planner V9"; Filename: "{uninstallexe}"
+Name: "{autodesktop}\Command Planner V9"; Filename: "{app}\CommandPlannerV9.exe"; Tasks: desktopicon
+
+[Run]
+Filename: "{app}\CommandPlannerV9.exe"; Description: "{cm:LaunchProgram,Command Planner V9}"; Flags: nowait postinstall skipifsilent
+```
+
+3. Compile the installer:
+   ```cmd
+   "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss
+   ```
+4. Output: `dist-installer/CommandPlannerV9_Setup.exe`.
+   - Single-file installer wizard.
+   - Creates Start Menu entries and Desktop shortcuts.
+   - Fully uninstallable via Windows Settings -> Installed Apps.
+
+---
+
+## 10. Safe Application Updates Without Data Loss
+
+A frequent fear when distributing desktop applications is that updating the executable will overwrite user data.
+
+### Architectural Guarantee: Separation of Code and State
+
+In Command Planner V9:
+- **Application Binaries**: Reside in `{autopf}\Command Planner V9\` (or your build directory).
+- **User Database**: Resides strictly in `%LOCALAPPDATA%\CommandPlannerV9\planner.db`.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    WINDOWS FILE SYSTEM                      │
+│                                                             │
+│  Program Files / Install Directory (Replaced on Update)     │
+│  ├── CommandPlannerV9.exe                                   │
+│  ├── python311.dll                                          │
+│  └── frontend/dist/                                         │
+│                                                             │
+│  ─────────────────────────────────────────────────────────  │
+│                                                             │
+│  User AppData Directory (Never Touched on Update)           │
+│  %LOCALAPPDATA%\CommandPlannerV9\                           │
+│  ├── planner.db           (All Tasks, Notes, Syllabus)      │
+│  ├── planner.db-wal       (Active Write-Ahead Log)          │
+│  └── backups/             (30-day Rolling SQLite Snapshots) │
+└─────────────────────────────────────────────────────────────┘
+```
+
+When you release V9.1 or V10.0:
+1. Running the new installer updates the `.exe`, DLLs, and React assets.
+2. The user's `%LOCALAPPDATA%\CommandPlannerV9\planner.db` is left untouched.
+3. On launch, `backend/database.py` runs non-destructive schema migrations, upgrading existing tables while preserving 100% of user data.
+
+---
+
+## 11. Desktop Verification Checklist
 
 Use this checklist to confirm production readiness before distributing your desktop application:
 
 - [ ] **Clean Build**: `npm run build` exits with code 0 and populates `frontend/dist/`.
+- [ ] **Single Instance Test**: Launch the application. Double-click the executable again. Confirm that no duplicate process or port collision error occurs.
 - [ ] **Offline Test**: Disconnect Wi-Fi and Ethernet. Launch the application. Verify all tabs load immediately.
 - [ ] **Persistence Check**: Create a task with recurring priority, schedule an exam, and record a Pomodoro session. Close the window and reopen. Verify all records remain intact.
 - [ ] **Audio Test**: Complete a Pomodoro interval. Confirm that the completion chime plays through your speakers without external audio files.
+- [ ] **Notification Test**: Minimize the app. Trigger an alert. Confirm that a native Windows toast appears in the Action Center.
 - [ ] **Chart Verification**: Open the Productivity tab. Confirm the 52-week heatmap and Kiviat radar charts render correctly via SVG.
-- [ ] **Database Integrity**: Confirm `planner.db-wal` and `planner.db-shm` are active and that automatic backups are created without permission errors.
+- [ ] **Tray Test**: Click minimize or hide. Confirm the tray icon appears next to the Windows clock and that clicking it restores the window.
+- [ ] **Installer Test**: Run `CommandPlannerV9_Setup.exe`. Verify the desktop shortcut, Start Menu group, and uninstaller in Windows Settings.
