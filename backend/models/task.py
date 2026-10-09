@@ -1,7 +1,7 @@
 """Task model — priority-sorted tasks with recurrence support."""
 import uuid
 from datetime import datetime
-from sqlalchemy import String, Boolean, DateTime
+from sqlalchemy import String, Boolean, DateTime, Integer
 from sqlalchemy.orm import Mapped, mapped_column
 from backend.database import Base, utcnow
 
@@ -19,4 +19,6 @@ class Task(Base):
     added_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     tags: Mapped[str | None] = mapped_column(String, nullable=True)
     archived: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    order: Mapped[int] = mapped_column(Integer, default=0, index=True)
+
 

@@ -23,6 +23,9 @@ class TaskUpdate(BaseModel):
     recur: str | None = Field(default=None, max_length=20)
     tags: list[str] | None = None
 
+class TaskReorder(BaseModel):
+    task_ids: list[str] = Field(..., description="Ordered list of task IDs")
+
 class TaskResponse(BaseModel):
     id: str
     text: str
@@ -34,6 +37,7 @@ class TaskResponse(BaseModel):
     added_at: datetime
     tags: list[str] = []
     archived: bool = False
+    order: int = 0
 
     @field_validator("tags", mode="before")
     @classmethod

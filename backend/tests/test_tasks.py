@@ -58,3 +58,22 @@ def test_delete_task(client):
     
     get_response = client.get("/tasks")
     assert not any(t["id"] == task_id for t in get_response.json())
+
+
+def test_reorder_tasks(client):
+    r1 = client.post("/tasks", json={"text": "Task 1", "priority": "None"}).json()
+    r2 = client.post("/tasks", json={"text": "Task 2", "priority": "None"}).json()
+    r3 = client.post("/tasks", json={"text": "Task 3", "priority": "None"}).json()
+
+    # Reorder to [Task 3, Task 1, Task 2]
+    reorder_res = client.post("/tasks/reorder", json={"task_ids": [r3["id"], r1["id"], r2["id"]]})
+    assert reorder_res.status_code == 200
+
+    tasks = client.get("/tasks").json()
+    # Filter our 3 tasks
+    filtered = [t for t in tasks if t["id"] in {r1["id"], r2["id"], r3["id"]}]
+    assert len(filtered) == 3
+    assert filtered[0]["id"] == r3["id"]
+    assert filtered[1]["id"] == r1["id"]
+    assert filtered[2]["id"] == r2["id"]
+

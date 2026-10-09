@@ -344,11 +344,20 @@ export default function TasksPage() {
       setTasks((prevTasks) => {
         const oldIndex = prevTasks.findIndex((t) => t.id === active.id);
         const newIndex = prevTasks.findIndex((t) => t.id === over.id);
-        return arrayMove(prevTasks, oldIndex, newIndex);
+        if (oldIndex === -1 || newIndex === -1) return prevTasks;
+        const updated = arrayMove(prevTasks, oldIndex, newIndex);
+
+        // Persist the new sequence to the database
+        tasksApi.reorder(updated.map((t) => t.id)).catch(() => {
+          addToast('Failed to save task order', 'error');
+        });
+
+        return updated;
       });
-      addToast('Tasks reordered locally', 'success');
+      addToast('Tasks reordered', 'success');
     }
   }, [addToast]);
+
 
   const toggleGroupCollapse = useCallback((g: string) => {
     setCollapsedGroups((prev) => {

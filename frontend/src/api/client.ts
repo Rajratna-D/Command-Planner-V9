@@ -179,6 +179,7 @@ export const tasksApi = {
   update: (id: string, data: TaskUpdate) => patch<Task>(`/tasks/${id}`, data),
   delete: (id: string) => del<void>(`/tasks/${id}`),
   archive: (id: string) => patch<Task>(`/tasks/${id}/archive`),
+  reorder: (task_ids: string[]) => post<{ ok: boolean }>('/tasks/reorder', { task_ids }),
 };
 
 // ── Tests ──────────────────────────────────────────────────────────────────

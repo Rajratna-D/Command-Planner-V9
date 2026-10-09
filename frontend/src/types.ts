@@ -14,6 +14,7 @@ export interface Task {
   added_at: string;
   tags?: string[];
   archived: boolean;
+  order?: number;
 }
 export type Priority = 'Immediate' | 'Important' | '2nd Priority' | '3rd Priority' | 'Someday';
 export type Recurrence = 'None' | 'Daily' | 'Weekly' | 'Monthly';

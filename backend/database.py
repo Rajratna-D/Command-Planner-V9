@@ -74,6 +74,12 @@ def run_migrations():
             if columns and "archived" not in columns:
                 cursor.execute(f"ALTER TABLE {table} ADD COLUMN archived BOOLEAN DEFAULT 0")
 
+        # Check tasks table for order column
+        cursor.execute("PRAGMA table_info(tasks)")
+        task_columns = [row[1] for row in cursor.fetchall()]
+        if task_columns and "order" not in task_columns:
+            cursor.execute('ALTER TABLE tasks ADD COLUMN "order" INTEGER DEFAULT 0')
+
         conn.commit()
         conn.close()
     except Exception as e:

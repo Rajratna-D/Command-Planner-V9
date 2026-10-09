@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from backend.database import get_db, utcnow
 from backend.models.task import Task
-from backend.schemas.schemas import TaskCreate, TaskUpdate, TaskResponse
+from backend.schemas.schemas import TaskCreate, TaskUpdate, TaskResponse, TaskReorder
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
@@ -18,13 +18,15 @@ def get_tasks(done: bool | None = None, db: Session = Depends(get_db)):
     if done is not None:
         q = q.filter(Task.done == done)
     tasks = q.all()
-    # Sort by priority order
+    # Sort by completion, then custom order if present, then priority order
     tasks.sort(key=lambda t: (
         t.done,
+        t.order if (t.order is not None and t.order > 0) else 999999,
         PRIORITY_ORDER.index(t.priority) if t.priority in PRIORITY_ORDER else 99,
         t.due or "9999",
     ))
     return tasks
+
 
 
 @router.post("", response_model=TaskResponse, status_code=201)
@@ -100,6 +102,14 @@ def archive_task(task_id: str, db: Session = Depends(get_db)):
     return task
 
 
+@router.post("/reorder")
+def reorder_tasks(data: TaskReorder, db: Session = Depends(get_db)):
+    for index, task_id in enumerate(data.task_ids):
+        db.query(Task).filter(Task.id == task_id).update({"order": index + 1})
+    db.commit()
+    return {"ok": True}
+
+
 @router.patch("/{task_id}/reorder")
 def reorder_task(task_id: str, new_priority: str, db: Session = Depends(get_db)):
     task = db.query(Task).filter(Task.id == task_id).first()
@@ -110,3 +120,4 @@ def reorder_task(task_id: str, new_priority: str, db: Session = Depends(get_db))
     task.priority = new_priority
     db.commit()
     return {"ok": True}
+

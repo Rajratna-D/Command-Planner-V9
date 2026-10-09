@@ -35,9 +35,41 @@ When logging future changes, please use the following template:
 
 ## Versions & Releases
 
+- [9.2.0 - 2026-10-09 (Persistent Task Reordering)](#920---2026-10-09)
+
 - [9.1.0 - 2026-09-12 (Security Hardening, Production Architecture & Guides)](#910---2026-09-12)
 - [9.0.0 - 2026-09-11 (Command Planner V9 Full-Stack Architecture Launch)](#900---2026-09-11)
 - [Legacy Architecture (V1 - V8)](#legacy-architecture-v1---v8)
+
+---
+
+## [9.2.0] - 2026-10-09
+
+### Overview
+This release introduces persistent drag-and-drop task reordering across sessions and tab navigations.
+
+---
+
+### 1. Persistent Drag-and-Drop Task Ordering
+- **Type**: Bugfix / Minor
+- **Affected Files**:
+  - `backend/models/task.py` (`Task.order`)
+  - `backend/database.py` (`run_migrations`)
+  - `backend/schemas/schemas.py` (`TaskResponse`, `TaskReorder`)
+  - `backend/routers/tasks.py` (`get_tasks`, `reorder_tasks`)
+  - `frontend/src/types.ts` (`Task.order`)
+  - `frontend/src/api/client.ts` (`tasksApi.reorder`)
+  - `frontend/src/pages/TasksPage.tsx` (`handleDragEnd`)
+  - `backend/tests/test_tasks.py` (`test_reorder_tasks`)
+- **What Changed**:
+  - Added indexed `order: int` column to `tasks` table with automatic SQLite migration.
+  - Added `POST /tasks/reorder` endpoint supporting batch reordering.
+  - Updated `get_tasks` sorting tuple to prioritize `(done, order, priority, due)`.
+  - Updated frontend `handleDragEnd` to optimistically reorder the tasks list and persist the new order to the backend via `tasksApi.reorder()`.
+- **Reason Behind the Change**:
+  - Tasks reordered by drag-and-drop reverted to default order when switching tabs and returning to the Tasks tab.
+- **Outcome / Goal**:
+  - Task ordering persists seamlessly across tab switches, reloads, and multi-device synchronizations.
 
 ---
 
