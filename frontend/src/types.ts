@@ -16,6 +16,7 @@ export interface Task {
   archived: boolean;
   order?: number;
 }
+
 export type Priority = 'Immediate' | 'Important' | '2nd Priority' | '3rd Priority' | 'Someday';
 export type Recurrence = 'None' | 'Daily' | 'Weekly' | 'Monthly';
 
@@ -157,6 +158,7 @@ export interface PomodoroSessionCreate {
   start_time?: string;  // HH:MM — session start time for midnight-split detection
 }
 
+
 // ── Notes ──────────────────────────────────────────────────────────────────
 export interface Note {
   id: string;
@@ -295,6 +297,29 @@ export interface ProductivityInsight {
   icon: string;
   category: string;
 }
+
+export interface HistoryPeriod {
+  key: string;
+  label: string;
+  start_date: string;
+  end_date: string;
+  total_hours: number;
+  duration_min: number;
+  sessions: number;
+  days_worked: number;
+  goal_hit_rate: number;
+  daily_avg_hours: number;
+  score: number;
+  grade: string;
+  top_subject?: string | null;
+}
+
+
+export interface ProductivityHistoryResponse {
+  weeks: HistoryPeriod[];
+  months: HistoryPeriod[];
+}
+
 
 // ── Navigation ─────────────────────────────────────────────────────────────
 export type TabKey =

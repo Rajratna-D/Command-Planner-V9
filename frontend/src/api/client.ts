@@ -168,9 +168,11 @@ import type {
   SettingResponse,
   ProductivityScores, HeatmapDay, SpiderData, PeakHoursData,
   SubjectBreakdownItem, DailyTrendSummary, ProductivityBadge, ProductivityInsight,
+  ProductivityHistoryResponse,
   OverviewData, BackupInfo,
   ArchiveItem, ArchiveStats,
 } from '../types';
+
 
 // ── Tasks ──────────────────────────────────────────────────────────────────
 export const tasksApi = {
@@ -181,6 +183,7 @@ export const tasksApi = {
   archive: (id: string) => patch<Task>(`/tasks/${id}/archive`),
   reorder: (task_ids: string[]) => post<{ ok: boolean }>('/tasks/reorder', { task_ids }),
 };
+
 
 // ── Tests ──────────────────────────────────────────────────────────────────
 export const testsApi = {
@@ -273,6 +276,7 @@ export const productivityApi = {
   dailyTrend: (days?: number) => get<DailyTrendSummary>(`/productivity/daily-trend${days ? `?days=${days}` : ''}`),
   badges: () => get<ProductivityBadge[]>('/productivity/badges'),
   insights: () => get<ProductivityInsight[]>('/productivity/insights'),
+  history: () => get<ProductivityHistoryResponse>('/productivity/history'),
 };
 
 // ── Analytics ──────────────────────────────────────────────────────────────

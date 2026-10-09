@@ -108,6 +108,10 @@ def test_overview_focus_hours_today(client):
 
 def test_subject_breakdown(client):
     today = date.today().isoformat()
+    # Create active subjects in syllabus/subjects tab
+    client.post("/syllabus", json={"name": "Linear Algebra"})
+    client.post("/syllabus", json={"name": "Deep Learning"})
+
     client.post("/pomodoro/sessions", json={
         "date": today,
         "time": "10:00",
@@ -122,9 +126,17 @@ def test_subject_breakdown(client):
         "task": "Subject: Deep Learning",
         "duration_min": 120
     })
+    # Task-only session with no corresponding subject
+    client.post("/pomodoro/sessions", json={
+        "date": today,
+        "time": "14:00",
+        "type": "work",
+        "task": "Clean up desk and notes",
+        "duration_min": 30
+    })
 
     breakdown = client.get("/productivity/subject-breakdown").json()
-    assert len(breakdown) >= 2
+    assert len(breakdown) == 2
     la = next((b for b in breakdown if b["subject"] == "Linear Algebra"), None)
     dl = next((b for b in breakdown if b["subject"] == "Deep Learning"), None)
     assert la is not None
@@ -132,6 +144,8 @@ def test_subject_breakdown(client):
     assert dl is not None
     assert dl["duration_min"] >= 120
     assert dl["hours"] >= 2.0
+    # Clean up desk must NOT be in subject breakdown
+    assert not any(b["subject"] == "Clean up desk and notes" for b in breakdown)
 
 
 def test_daily_trend_and_badges(client):
@@ -174,3 +188,47 @@ def test_peak_hours_hour_distribution(client):
     assert peak["minutes"][22] >= 45
     assert peak["minutes"][23] >= 60
     assert peak["minutes"][0] >= 15
+
+
+def test_productivity_history(client):
+    today = date.today().isoformat()
+    client.post("/syllabus", json={"name": "Computer Science"})
+    # Log session in a completed past week and month
+    client.post("/pomodoro/sessions", json={
+        "date": "2026-06-15",
+        "time": "09:00",
+        "type": "work",
+        "task": "[Computer Science] Algorithms",
+        "subject_name": "Computer Science",
+        "duration_min": 180
+    })
+    # Log session for today (ongoing week/month)
+    client.post("/pomodoro/sessions", json={
+        "date": today,
+        "time": "10:00",
+        "type": "work",
+        "task": "[Computer Science] Data Structures",
+        "subject_name": "Computer Science",
+        "duration_min": 120
+    })
+
+    res = client.get("/productivity/history")
+    assert res.status_code == 200
+    data = res.json()
+    assert "weeks" in data
+    assert "months" in data
+    # Completed past periods should be included
+    assert len(data["weeks"]) >= 1
+    assert len(data["months"]) >= 1
+    past_week = next((w for w in data["weeks"] if "2026-06" in w["start_date"]), None)
+    assert past_week is not None
+    assert past_week["sessions"] >= 1
+    assert past_week["total_hours"] >= 3.0
+    assert "grade" in past_week
+    # Current ongoing week must NOT be in finalized history
+    assert not any(w["end_date"] >= today for w in data["weeks"])
+    # Current ongoing month must NOT be in finalized history
+    assert not any(m["end_date"] >= today for m in data["months"])
+
+    assert "score" in past_week
+

@@ -53,6 +53,7 @@ class TaskResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+
 # ══════════════════════════════════════════════════════════════════════════
 # TESTS
 # ══════════════════════════════════════════════════════════════════════════
@@ -239,6 +240,7 @@ class PomodoroSessionResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+
 # ══════════════════════════════════════════════════════════════════════════
 # NOTES
 # ══════════════════════════════════════════════════════════════════════════
@@ -397,6 +399,26 @@ class ProductivityInsight(BaseModel):
     message: str
     icon: str
     category: str
+
+class HistoryPeriod(BaseModel):
+    key: str
+    label: str
+    start_date: str
+    end_date: str
+    total_hours: float
+    duration_min: int
+    sessions: int
+    days_worked: int
+    goal_hit_rate: int
+    daily_avg_hours: float
+    score: int
+    grade: str
+    top_subject: str | None = None
+
+class ProductivityHistoryResponse(BaseModel):
+    weeks: list[HistoryPeriod]
+    months: list[HistoryPeriod]
+
 
 
 # ══════════════════════════════════════════════════════════════════════════

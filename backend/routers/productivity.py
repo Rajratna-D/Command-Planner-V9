@@ -7,10 +7,12 @@ from sqlalchemy.orm import Session
 from backend.database import get_db
 from backend.models.pomodoro import PomodoroSession
 from backend.models.settings import Setting
+from backend.models.syllabus import Subject
 from backend.schemas.schemas import (
     ProductivityScores, ScoreCard, HeatmapDay, SpiderData,
     SubjectBreakdownItem, DailyTrendDay, DailyTrendSummary,
-    ProductivityBadge, ProductivityInsight
+    ProductivityBadge, ProductivityInsight,
+    HistoryPeriod, ProductivityHistoryResponse
 )
 
 SUBJECT_COLORS = [
@@ -331,53 +333,75 @@ def get_peak_hours(db: Session = Depends(get_db)):
 @router.get("/subject-breakdown", response_model=list[SubjectBreakdownItem])
 def get_subject_breakdown(db: Session = Depends(get_db)):
     """
-    Returns study time distribution by subject/task.
-    Only processes sessions that explicitly include a subject tag or were logged as new tagged sessions.
+    Returns study time distribution strictly by active subjects from the Subjects tab.
+    Non-subject tasks or tasks without a matching subject from the syllabus are excluded.
     """
+    active_subjects = db.query(Subject).all()
+    if not active_subjects:
+        return []
+
+    subject_id_to_name = {s.id: s.name for s in active_subjects}
+    subject_lower_to_name = {s.name.lower().strip(): s.name for s in active_subjects}
+
     sessions = (
         db.query(
+            PomodoroSession.subject_id,
+            PomodoroSession.subject_name,
             PomodoroSession.task,
             func.sum(func.coalesce(PomodoroSession.duration_min, 25)).label("duration_min"),
             func.count(PomodoroSession.id).label("sessions"),
         )
         .filter(
             PomodoroSession.type == "work",
-            PomodoroSession.task != "",
-            PomodoroSession.task != None,
         )
-        .group_by(PomodoroSession.task)
+        .group_by(PomodoroSession.subject_id, PomodoroSession.subject_name, PomodoroSession.task)
         .all()
     )
 
-    # Group by subject/task tag
     subject_map: dict[str, dict] = {}
     total_min = 0
 
-    for task_str, d_min, s_count in sessions:
-        task_str = (task_str or "").strip()
-        if not task_str:
-            continue
-        
-        # Normalize subject label (e.g. "[OOPs] Assignment" -> "OOPs", "Subject: ML" -> "ML", "Math: Calculus" -> "Math")
-        subject_name = task_str
-        if task_str.startswith("[") and "]" in task_str:
-            subject_name = task_str[1:task_str.index("]")].strip()
-        elif task_str.lower().startswith("subject:"):
-            subject_name = task_str.split(":", 1)[1].strip()
-        elif ":" in task_str:
-            subject_name = task_str.split(":", 1)[0].strip()
+    for s_id, s_name, task_str, d_min, s_count in sessions:
+        matched_name = None
+        # 1. Direct subject_id match
+        if s_id and s_id in subject_id_to_name:
+            matched_name = subject_id_to_name[s_id]
+        # 2. Direct subject_name match
+        elif s_name and s_name.lower().strip() in subject_lower_to_name:
+            matched_name = subject_lower_to_name[s_name.lower().strip()]
+        # 3. Check task string for [Subject] or subject name prefix
+        elif task_str:
+            t = task_str.strip()
+            if t.startswith("[") and "]" in t:
+                inside = t[1:t.index("]")].strip().lower()
+                if inside in subject_lower_to_name:
+                    matched_name = subject_lower_to_name[inside]
+            elif t.lower().startswith("subject:"):
+                after_colon = t.split(":", 1)[1].strip().lower()
+                if after_colon in subject_lower_to_name:
+                    matched_name = subject_lower_to_name[after_colon]
+            elif ":" in t:
+                before_colon = t.split(":", 1)[0].strip().lower()
+                after_colon = t.split(":", 1)[1].strip().lower()
+                if before_colon in subject_lower_to_name:
+                    matched_name = subject_lower_to_name[before_colon]
+                elif after_colon in subject_lower_to_name:
+                    matched_name = subject_lower_to_name[after_colon]
+            elif t.lower() in subject_lower_to_name:
+                matched_name = subject_lower_to_name[t.lower()]
 
-        if not subject_name:
-            subject_name = "General"
+        # Only include sessions that matched an active subject in the subjects tab
+        if not matched_name:
+            continue
 
         d_min_int = int(d_min)
         s_count_int = int(s_count)
         total_min += d_min_int
 
-        if subject_name not in subject_map:
-            subject_map[subject_name] = {"duration_min": 0, "sessions": 0}
-        subject_map[subject_name]["duration_min"] += d_min_int
-        subject_map[subject_name]["sessions"] += s_count_int
+        if matched_name not in subject_map:
+            subject_map[matched_name] = {"duration_min": 0, "sessions": 0}
+        subject_map[matched_name]["duration_min"] += d_min_int
+        subject_map[matched_name]["sessions"] += s_count_int
 
     if not subject_map or total_min == 0:
         return []
@@ -403,11 +427,11 @@ def get_subject_breakdown(db: Session = Depends(get_db)):
     return result
 
 
-
 @router.get("/daily-trend", response_model=DailyTrendSummary)
 def get_daily_trend(days: int = 14, db: Session = Depends(get_db)):
     """
     Returns daily focus hours vs daily goal line for the past N days (e.g. 14 or 30 days).
+    Smart goal hit rate baseline avoids unfair midnight drop penalty for unfinished days.
     """
     days = max(7, min(days, 60))
     goal = _get_goal_hours(db, 3.0)
@@ -453,8 +477,28 @@ def get_daily_trend(days: int = 14, db: Session = Depends(get_db)):
             )
         )
 
-    hit_rate = round((goals_met / days) * 100)
-    avg_hours = round((total_period_min / 60.0) / days, 2)
+    # Check today's progress to avoid midnight drop penalty
+    today_str = today.isoformat()
+    today_entry = data_map.get(today_str, {"duration_min": 0})
+    today_hours = round(today_entry["duration_min"] / 60.0, 2)
+    today_goal_reached = (today_hours >= goal)
+
+    past_days_count = days - 1
+    # Count goals met in past completed days (excluding today)
+    past_goals_met = sum(1 for d in trend_days[:-1] if d.goal_reached)
+
+    if today_goal_reached:
+        hit_rate = round((goals_met / days) * 100)
+        avg_hours = round((total_period_min / 60.0) / days, 2)
+    else:
+        # Today is incomplete/just started; calculate baseline over past completed days
+        if past_days_count > 0:
+            hit_rate = round((past_goals_met / past_days_count) * 100)
+            past_min = total_period_min - today_entry["duration_min"]
+            avg_hours = round((past_min / 60.0) / past_days_count, 2)
+        else:
+            hit_rate = 0
+            avg_hours = round((total_period_min / 60.0) / days, 2)
 
     return DailyTrendSummary(
         days=trend_days,
@@ -463,6 +507,178 @@ def get_daily_trend(days: int = 14, db: Session = Depends(get_db)):
         best_day_date=best_day_date or today.isoformat(),
         best_day_hours=round(best_day_min / 60.0, 2),
         total_period_hours=round(total_period_min / 60.0, 2),
+    )
+
+
+@router.get("/history", response_model=ProductivityHistoryResponse)
+def get_productivity_history(db: Session = Depends(get_db)):
+    """
+    Returns weekly and monthly historical productivity records with consistency metrics,
+    goal hit rates, daily average hours, scores, and letter grades.
+    """
+    goal = _get_goal_hours(db, 3.0)
+    today = date.today()
+
+    active_subjects = db.query(Subject).all()
+    subject_id_to_name = {s.id: s.name for s in active_subjects}
+    subject_lower_to_name = {s.name.lower().strip(): s.name for s in active_subjects}
+
+    sessions = (
+        db.query(PomodoroSession)
+        .filter(PomodoroSession.type == "work")
+        .order_by(PomodoroSession.date.desc())
+        .all()
+    )
+
+    weeks_map: dict[str, dict] = {}
+    months_map: dict[str, dict] = {}
+
+    def _resolve_sub_name(sess: PomodoroSession) -> str | None:
+        if sess.subject_id and sess.subject_id in subject_id_to_name:
+            return subject_id_to_name[sess.subject_id]
+        if sess.subject_name and sess.subject_name.lower().strip() in subject_lower_to_name:
+            return subject_lower_to_name[sess.subject_name.lower().strip()]
+        if sess.task:
+            t = sess.task.strip()
+            if t.startswith("[") and "]" in t:
+                inside = t[1:t.index("]")].strip().lower()
+                if inside in subject_lower_to_name:
+                    return subject_lower_to_name[inside]
+            elif t.lower().startswith("subject:"):
+                after_colon = t.split(":", 1)[1].strip().lower()
+                if after_colon in subject_lower_to_name:
+                    return subject_lower_to_name[after_colon]
+            elif ":" in t:
+                before_colon = t.split(":", 1)[0].strip().lower()
+                after_colon = t.split(":", 1)[1].strip().lower()
+                if before_colon in subject_lower_to_name:
+                    return subject_lower_to_name[before_colon]
+                if after_colon in subject_lower_to_name:
+                    return subject_lower_to_name[after_colon]
+            elif t.lower() in subject_lower_to_name:
+                return subject_lower_to_name[t.lower()]
+        return None
+
+    # Only completed weeks and months are included in the historical report
+    for sess in sessions:
+        if not sess.date:
+            continue
+        try:
+            d = date.fromisoformat(sess.date)
+        except ValueError:
+            continue
+
+        dur = sess.duration_min or 25
+        sub = _resolve_sub_name(sess)
+
+        # ── Week grouping ──
+        y, w, _ = d.isocalendar()
+        w_key = f"{y}-W{w:02d}"
+        if w_key not in weeks_map:
+            ws = d - timedelta(days=d.weekday())
+            we = ws + timedelta(days=6)
+            weeks_map[w_key] = {
+                "key": w_key,
+                "label": f"Week {w} ({ws.strftime('%b %d')} - {we.strftime('%b %d')})",
+                "start_date": ws.isoformat(),
+                "end_date": we.isoformat(),
+                "duration_min": 0,
+                "sessions": 0,
+                "day_minutes": {},
+                "subject_minutes": {},
+            }
+        weeks_map[w_key]["duration_min"] += dur
+        weeks_map[w_key]["sessions"] += 1
+        weeks_map[w_key]["day_minutes"][sess.date] = weeks_map[w_key]["day_minutes"].get(sess.date, 0) + dur
+        if sub:
+            weeks_map[w_key]["subject_minutes"][sub] = weeks_map[w_key]["subject_minutes"].get(sub, 0) + dur
+
+        # ── Month grouping ──
+        m_key = f"{d.year}-{d.month:02d}"
+        if m_key not in months_map:
+            ms = date(d.year, d.month, 1)
+            me = (date(d.year + 1, 1, 1) - timedelta(days=1)) if d.month == 12 else (date(d.year, d.month + 1, 1) - timedelta(days=1))
+            months_map[m_key] = {
+                "key": m_key,
+                "label": d.strftime("%B %Y"),
+                "start_date": ms.isoformat(),
+                "end_date": me.isoformat(),
+                "duration_min": 0,
+                "sessions": 0,
+                "day_minutes": {},
+                "subject_minutes": {},
+            }
+        months_map[m_key]["duration_min"] += dur
+        months_map[m_key]["sessions"] += 1
+        months_map[m_key]["day_minutes"][sess.date] = months_map[m_key]["day_minutes"].get(sess.date, 0) + dur
+        if sub:
+            months_map[m_key]["subject_minutes"][sub] = months_map[m_key]["subject_minutes"].get(sub, 0) + dur
+
+    def _grade_for_score(score: int) -> str:
+        if score >= 90:
+            return "A+"
+        if score >= 80:
+            return "A"
+        if score >= 70:
+            return "B"
+        if score >= 60:
+            return "C"
+        if score >= 50:
+            return "D"
+        return "Needs Work"
+
+    def _build_periods(raw_map: dict[str, dict], is_week: bool) -> list[HistoryPeriod]:
+        result = []
+        for key in sorted(raw_map.keys(), reverse=True):
+            item = raw_map[key]
+            p_start = date.fromisoformat(item["start_date"])
+            p_end = date.fromisoformat(item["end_date"])
+
+            # Exclude ongoing periods: only include finalized periods that have fully concluded
+            if p_end >= today:
+                continue
+
+            dur_min = item["duration_min"]
+            total_h = round(dur_min / 60.0, 2)
+            days_worked = len(item["day_minutes"])
+
+            days_goal_met = sum(1 for d_str, m in item["day_minutes"].items() if (m / 60.0) >= goal)
+            cal_days = 7 if is_week else (p_end - p_start).days + 1
+            hit_rate = round((days_goal_met / cal_days) * 100) if cal_days > 0 else 0
+
+            daily_avg = round(total_h / days_worked, 2) if days_worked > 0 else 0.0
+
+            target_h = (goal * 5) if is_week else (goal * 20)
+            vol_score = min(40, (total_h / max(1.0, target_h)) * 40)
+            score = min(100, max(0, round((hit_rate * 0.6) + vol_score)))
+            grade = _grade_for_score(score)
+
+            top_sub = None
+            if item["subject_minutes"]:
+                top_sub = max(item["subject_minutes"].items(), key=lambda x: x[1])[0]
+
+            result.append(
+                HistoryPeriod(
+                    key=item["key"],
+                    label=item["label"],
+                    start_date=item["start_date"],
+                    end_date=item["end_date"],
+                    total_hours=total_h,
+                    duration_min=dur_min,
+                    sessions=item["sessions"],
+                    days_worked=days_worked,
+                    goal_hit_rate=hit_rate,
+                    daily_avg_hours=daily_avg,
+                    score=score,
+                    grade=grade,
+                    top_subject=top_sub,
+                )
+            )
+        return result
+
+    return ProductivityHistoryResponse(
+        weeks=_build_periods(weeks_map, is_week=True),
+        months=_build_periods(months_map, is_week=False),
     )
 
 
