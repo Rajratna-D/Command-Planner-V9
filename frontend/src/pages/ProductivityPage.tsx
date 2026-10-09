@@ -5,7 +5,7 @@ import { productivityApi } from '../api/client';
 import { useAppStore } from '../store/appStore';
 import type { ProductivityScores, ScoreCard } from '../types';
 import { formatStudyTime } from '../utils/formatTime';
-import { Flame, TrendingUp, Target, Award } from 'lucide-react';
+import { Flame, TrendingUp, Target, Award, BarChart3 } from 'lucide-react';
 import HeatmapCalendar from '../components/charts/HeatmapCalendar';
 import KiviatChart from '../components/charts/KiviatChart';
 import PeakHoursChart from '../components/charts/PeakHoursChart';
@@ -13,10 +13,12 @@ import DailyTrendChart from '../components/charts/DailyTrendChart';
 import SubjectBreakdownChart from '../components/charts/SubjectBreakdownChart';
 import ProductivityBadges from '../components/productivity/ProductivityBadges';
 import ProductivityInsights from '../components/productivity/ProductivityInsights';
+import OverallProgressModal from '../components/productivity/OverallProgressModal';
 
 export default function ProductivityPage() {
   const [scores, setScores] = useState<ProductivityScores | null>(null);
   const [loading, setLoading] = useState(true);
+  const [historyModalOpen, setHistoryModalOpen] = useState(false);
   const addToast = useAppStore((s) => s.addToast);
 
   useEffect(() => {
@@ -64,8 +66,8 @@ export default function ProductivityPage() {
           </p>
         </div>
 
-        {/* Header Streak & Goal Badges */}
-        <div className="flex items-center gap-2">
+        {/* Header Streak, Goal Badges, and Overall Progress & Reports */}
+        <div className="flex items-center gap-2 flex-wrap">
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-warning-500/10 border border-warning-500/20 text-xs font-bold text-warning-500 shadow-xs">
             <Flame size={15} />
             <span>{scores.streak} Day Streak</span>
@@ -74,6 +76,13 @@ export default function ProductivityPage() {
             <Target size={15} />
             <span>{scores.daily_goal}h Daily Goal</span>
           </div>
+          <button
+            onClick={() => setHistoryModalOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer"
+          >
+            <BarChart3 size={15} />
+            <span>Overall Progress & Reports</span>
+          </button>
         </div>
       </div>
 
@@ -163,6 +172,12 @@ export default function ProductivityPage() {
 
       {/* ── 7. Focus Milestones & Achievements (Bottom Section) ── */}
       <ProductivityBadges />
+
+      {/* ── Overall Historical Progress & Reports Modal ── */}
+      <OverallProgressModal
+        isOpen={historyModalOpen}
+        onClose={() => setHistoryModalOpen(false)}
+      />
     </div>
   );
 }

@@ -35,8 +35,7 @@ When logging future changes, please use the following template:
 
 ## Versions & Releases
 
-- [9.2.0 - 2026-10-09 (Persistent Task Reordering)](#920---2026-10-09)
-
+- [9.2.0 - 2026-10-09 (Task Reordering, Pomodoro Switch Guard, Smart Hit Rate, Subject Breakdown & Historical Reports)](#920---2026-10-09)
 - [9.1.0 - 2026-09-12 (Security Hardening, Production Architecture & Guides)](#910---2026-09-12)
 - [9.0.0 - 2026-09-11 (Command Planner V9 Full-Stack Architecture Launch)](#900---2026-09-11)
 - [Legacy Architecture (V1 - V8)](#legacy-architecture-v1---v8)
@@ -46,7 +45,7 @@ When logging future changes, please use the following template:
 ## [9.2.0] - 2026-10-09
 
 ### Overview
-This release introduces persistent drag-and-drop task reordering, an accidental switch guard for Pomodoro breaks with partial session auto-logging, and dual subject/task session attribution.
+This release addresses 3 critical workflow and calculation bugs across Tasks, Pomodoro, and Productivity analytics, enhances subject/task dual association for study sessions, and introduces a comprehensive historical weekly/monthly progress and reporting engine.
 
 ---
 
@@ -88,7 +87,7 @@ This release introduces persistent drag-and-drop task reordering, an accidental 
 - **What Changed**:
   - Intercepted mode switches (both normal and Zen mode) when an active timer is running with elapsed focus time.
   - Added warning modal: *"You have completed X mins of focus. Do you want to switch?"* with options:
-    - **Continue to Break**: Logs completed minutes (if >= 1 min) to database and transitions to break mode without losing progress.
+    - **Continue to Break**: Logs completed minutes (if $\ge 1$ min) to database and transitions to break mode without losing progress.
     - **Close**: Cancels switch and keeps the active timer running uninterrupted.
   - Added database columns `subject_id`, `subject_name`, and `task_id` to `pomodoro_sessions`.
   - Built dual selector allowing all three usage combinations:
@@ -100,6 +99,46 @@ This release introduces persistent drag-and-drop task reordering, an accidental 
   - Accidentally clicking short/long break immediately terminated the timer and discarded completed focus time. Users also needed flexibility to log general non-subject tasks or subject-only study blocks.
 - **Outcome / Goal**:
   - No focus time is lost on accidental break clicks, and sessions retain clear subject/task attribution throughout the UI.
+
+---
+
+### 3. Smart Midnight Goal Hit Rate Baseline & Subject-Only Pie Chart
+- **Type**: Bugfix / Performance / Minor
+- **Affected Files**:
+  - `backend/routers/productivity.py` (`get_daily_trend`, `get_subject_breakdown`)
+  - `backend/tests/test_productivity.py` (`test_subject_breakdown`, `test_daily_trend_and_badges`)
+- **What Changed**:
+  - Refactored `get_daily_trend` goal hit rate calculation: when today has not yet met the goal (ongoing day), the rate calculates over the past completed days baseline (`days - 1`) rather than treating 12:01 AM as a failed day. Once today's goal is met, today is incorporated as a win.
+  - Refactored `get_subject_breakdown`: cross-references session records with the active `Subject` syllabus table. Tasks without a corresponding subject are strictly excluded from the pie chart, and newly created subjects with study time display automatically.
+- **Reason Behind the Change**:
+  - Goal hit rate abruptly dropped after midnight (e.g. from 86% to 79%) simply because a new day started at 0 hours. Additionally, non-subject tasks were polluting the subject pie chart with arbitrary text slices.
+- **Outcome / Goal**:
+  - Hit rate remains stable across midnight rollovers. Pie chart strictly visualizes genuine syllabus subjects with zero distortion.
+
+---
+
+### 4. Overall Historical Progress & Downloadable Reports
+- **Type**: Feature / Bugfix / Minor
+- **Affected Files**:
+  - `backend/routers/productivity.py` (`get_productivity_history`)
+  - `backend/schemas/schemas.py` (`HistoryPeriod`, `ProductivityHistoryResponse`)
+  - `frontend/src/types.ts` (`HistoryPeriod`, `ProductivityHistoryResponse`)
+  - `frontend/src/api/client.ts` (`productivityApi.history`)
+  - `frontend/src/components/productivity/OverallProgressModal.tsx`
+  - `frontend/src/components/charts/HeatmapCalendar.tsx`
+  - `frontend/src/pages/ProductivityPage.tsx`
+  - `backend/tests/test_productivity.py` (`test_productivity_history`)
+- **What Changed**:
+  - Implemented `GET /productivity/history` aggregating focus sessions into ISO calendar weeks (`YYYY-Www`) and months (`YYYY-MM`).
+  - Added metrics: `total_hours`, `duration_min`, `sessions`, `days_worked`, `goal_hit_rate`, `daily_avg_hours`, `score`, `grade`, and `top_subject`.
+  - Enforced completed periods policy: unfinished, ongoing weeks and months (e.g. current week, current month) are strictly excluded from the historical reports until their full cycle concludes (Sunday for weeks, last day of month for months) to guarantee 100% finalized, immutable historical records.
+  - Built `OverallProgressModal` with tabs for Weekly History and Monthly History, aggregate statistics, performance grading, CSV export, and print/PDF report generation.
+  - Refactored `OverallProgressModal` and `HeatmapCalendar` modal to render via React's `createPortal(..., document.body)` with `z-[100]`, backdrop click dismiss, and `Escape` key handling. This fixes CSS containing-block bugs where parent animations (`transform: translateY(...)`) caused `position: fixed` modals to render offscreen.
+  - Documented exact calculation methods for Goal Hit Rate (past-completed-days baseline) and Performance Score/Grade ($60\%$ habit hit rate $+ 40\%$ study volume).
+- **Reason Behind the Change**:
+  - User requested a centralized historical view to evaluate weekly and monthly progress over time with downloadable progress reports, and resolved modal rendering issues caused by CSS animation transforms.
+- **Outcome / Goal**:
+  - Users can review long-term study consistency and export professional CSV and printable PDF reports anytime with zero layout clipping.
 
 ---
 
