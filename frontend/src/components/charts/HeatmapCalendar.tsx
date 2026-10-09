@@ -1,5 +1,6 @@
 
 import { useEffect, useState, useRef, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { useAppStore } from '../../store/appStore';
 import { productivityApi, pomodoroApi } from '../../api/client';
 import type { HeatmapDay, PomodoroSession } from '../../types';
@@ -7,7 +8,19 @@ import { formatStudyTime } from '../../utils/formatTime';
 import { Calendar, X, Clock, Brain, Coffee } from 'lucide-react';
 import Badge from '../ui/Badge';
 
+function formatSessionDisplay(task?: string, subjectName?: string | null): string {
+  const t = (task || '').trim();
+  const s = (subjectName || '').trim();
+  if (s && t) {
+    if (t.toLowerCase().startsWith(`[${s.toLowerCase()}]`)) return t;
+    return `[${s}] ${t}`;
+  }
+  if (s) return `[${s}]`;
+  return t || 'Focus Session';
+}
+
 export default function HeatmapCalendar() {
+
   const currentYear = new Date().getFullYear();
   const [selectedYear, setSelectedYear] = useState<number>(currentYear);
   const [data, setData] = useState<HeatmapDay[]>([]);
@@ -354,8 +367,8 @@ export default function HeatmapCalendar() {
       )}
 
       {/* Day Session Inspector Modal */}
-      {inspectedDay && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in">
+      {inspectedDay && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in">
           <div className="bg-[var(--bg-card)] border border-[var(--border-default)] rounded-2xl p-6 shadow-2xl max-w-lg w-full space-y-4 max-h-[85vh] flex flex-col">
             {/* Modal Header */}
             <div className="flex items-start justify-between border-b border-[var(--border-default)] pb-3">
@@ -400,8 +413,9 @@ export default function HeatmapCalendar() {
                       </div>
                       <div className="min-w-0">
                         <p className="text-xs font-bold text-[var(--text-primary)] truncate">
-                          {s.task || (s.type === 'work' ? 'Focus Session' : 'Break')}
+                          {formatSessionDisplay(s.task, s.subject_name) || (s.type === 'work' ? 'Focus Session' : 'Break')}
                         </p>
+
                         <p className="text-[11px] text-[var(--text-tertiary)] flex items-center gap-1.5 mt-0.5">
                           <Clock size={11} />
                           <span>{s.time || '--:--'}</span>
@@ -429,7 +443,8 @@ export default function HeatmapCalendar() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

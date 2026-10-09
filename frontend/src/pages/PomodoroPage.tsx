@@ -1,12 +1,13 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Card from '../components/ui/Card';
 import Badge from '../components/ui/Badge';
 import Button from '../components/ui/Button';
+import Modal from '../components/ui/Modal';
 import { Input } from '../components/ui/Input';
 import { useAppStore } from '../store/appStore';
 import { formatStudyTime } from '../utils/formatTime';
-import { syllabusApi } from '../api/client';
-import type { Subject } from '../types';
+import { syllabusApi, tasksApi } from '../api/client';
+import type { Subject, Task } from '../types';
 import {
   usePomodoroStore,
   MODE_LABELS,
@@ -16,11 +17,24 @@ import {
 import { Play, Pause, RotateCcw, Coffee, Brain, Maximize2, Minimize2, Settings2, Sliders, Target, CheckCircle2, BookOpen } from 'lucide-react';
 import { motion } from 'framer-motion';
 
+function formatSessionDisplay(task?: string, subjectName?: string | null): string {
+  const t = (task || '').trim();
+  const s = (subjectName || '').trim();
+  if (s && t) {
+    if (t.toLowerCase().startsWith(`[${s.toLowerCase()}]`)) return t;
+    return `[${s}] ${t}`;
+  }
+  if (s) return `[${s}]`;
+  return t || 'Focus Session';
+}
+
 export default function PomodoroPage() {
   const mode = usePomodoroStore((s) => s.mode);
   const timeLeft = usePomodoroStore((s) => s.timeLeft);
   const running = usePomodoroStore((s) => s.running);
   const taskName = usePomodoroStore((s) => s.taskName);
+  const subjectName = usePomodoroStore((s) => s.subjectName);
+  const taskId = usePomodoroStore((s) => s.taskId);
   const zenMode = usePomodoroStore((s) => s.zenMode);
   const autoStartBreak = usePomodoroStore((s) => s.autoStartBreak);
   const autoStartFocus = usePomodoroStore((s) => s.autoStartFocus);
@@ -35,6 +49,9 @@ export default function PomodoroPage() {
 
   const setMode = usePomodoroStore((s) => s.setMode);
   const setTaskName = usePomodoroStore((s) => s.setTaskName);
+  const setSubject = usePomodoroStore((s) => s.setSubject);
+  const setTaskId = usePomodoroStore((s) => s.setTaskId);
+  const logPartialSessionAndSwitch = usePomodoroStore((s) => s.logPartialSessionAndSwitch);
   const setZenMode = usePomodoroStore((s) => s.setZenMode);
   const setAutoStartBreak = usePomodoroStore((s) => s.setAutoStartBreak);
   const setAutoStartFocus = usePomodoroStore((s) => s.setAutoStartFocus);
@@ -46,13 +63,19 @@ export default function PomodoroPage() {
   const addToast = useAppStore((s) => s.addToast);
 
   const [subjects, setSubjects] = useState<Subject[]>([]);
-  const [selectedSubject, setSelectedSubject] = useState<string>('');
+  const [pendingTasks, setPendingTasks] = useState<Task[]>([]);
+  const [switchModalOpen, setSwitchModalOpen] = useState(false);
+  const [targetMode, setTargetMode] = useState<TimerMode | null>(null);
+
+  const loadDependencies = useCallback(() => {
+    syllabusApi.list().then(setSubjects).catch(() => {});
+    tasksApi.list(false).then(setPendingTasks).catch(() => {});
+  }, []);
 
   useEffect(() => {
-    syllabusApi.list()
-      .then(setSubjects)
-      .catch(() => {});
-  }, []);
+    loadDependencies();
+  }, [loadDependencies]);
+
 
   // Toggle settings drawer / collapsible card
   const [showConfig, setShowConfig] = useState(false);
@@ -97,6 +120,34 @@ export default function PomodoroPage() {
   const handleToggleAutoStartFocus = (val: boolean) => {
     setAutoStartFocus(val);
     addToast(val ? 'Auto-start focus enabled' : 'Auto-start focus disabled', 'info');
+  };
+
+  const handleRequestModeSwitch = (newMode: TimerMode) => {
+    if (newMode === mode) return;
+
+    const totalSec = getDurationForMode(mode);
+    const elapsedSec = Math.max(0, totalSec - timeLeft);
+
+    // If timer is in focus mode and running or has elapsed >= 30s
+    if (mode === 'work' && (running || elapsedSec >= 30)) {
+      setTargetMode(newMode);
+      setSwitchModalOpen(true);
+    } else {
+      setMode(newMode);
+    }
+  };
+
+  const handleConfirmSwitchToBreak = async () => {
+    if (targetMode) {
+      await logPartialSessionAndSwitch(targetMode);
+      setSwitchModalOpen(false);
+      setTargetMode(null);
+    }
+  };
+
+  const handleCloseSwitchModal = () => {
+    setSwitchModalOpen(false);
+    setTargetMode(null);
   };
 
   // Render the core timer block (reused in Zen Mode and Normal Mode)
@@ -153,64 +204,95 @@ export default function PomodoroPage() {
       </div>
 
       {/* Subject & Task input / display */}
-      <div className="w-full max-w-sm mb-6 text-center space-y-2">
+      <div className="w-full max-w-md mb-6 space-y-3">
         {isZen ? (
-          taskName ? (
-            <p className="text-md font-medium text-[var(--text-primary)]">Focusing on: <span className="font-semibold text-brand-500">{taskName}</span></p>
+          (subjectName || taskName) ? (
+            <p className="text-md font-medium text-[var(--text-primary)] text-center">
+              Focusing on:{' '}
+              {subjectName && <span className="font-bold text-brand-500 mr-1.5">[{subjectName}]</span>}
+              {taskName && <span className="font-semibold text-[var(--text-primary)]">{taskName}</span>}
+            </p>
           ) : (
-            <p className="text-sm text-[var(--text-tertiary)] italic">Focus Session Active</p>
+            <p className="text-sm text-[var(--text-tertiary)] italic text-center">Focus Session Active</p>
           )
         ) : (
-          <div className="space-y-2">
-            {subjects.length > 0 && (
-              <div className="flex items-center gap-1.5 justify-center flex-wrap">
-                <span className="text-[11px] font-semibold text-[var(--text-tertiary)] flex items-center gap-1 mr-1">
-                  <BookOpen size={12} />
-                  <span>Subject:</span>
-                </span>
+          <div className="space-y-3">
+            {/* Subject Selector Pills */}
+            <div className="flex items-center gap-1.5 justify-center flex-wrap">
+              <span className="text-[11px] font-semibold text-[var(--text-tertiary)] flex items-center gap-1 mr-1">
+                <BookOpen size={12} />
+                <span>Subject:</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => setSubject(null, null)}
+                className={`px-2.5 py-0.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+                  !subjectName
+                    ? 'bg-brand-500 text-white shadow-xs'
+                    : 'bg-[var(--bg-input)] text-[var(--text-secondary)] hover:bg-[var(--bg-card-hover)]'
+                }`}
+              >
+                None
+              </button>
+              {subjects.map((sub) => (
                 <button
+                  key={sub.id}
                   type="button"
-                  onClick={() => {
-                    setSelectedSubject('');
-                    const cleaned = taskName.replace(/^\[.*?\]\s*/, '');
-                    setTaskName(cleaned);
-                  }}
-                  className={`px-2 py-0.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
-                    !selectedSubject
-                      ? 'bg-brand-500 text-white'
+                  onClick={() => setSubject(sub.id, sub.name)}
+                  className={`px-2.5 py-0.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer truncate max-w-[130px] ${
+                    subjectName === sub.name
+                      ? 'bg-brand-500 text-white shadow-xs'
                       : 'bg-[var(--bg-input)] text-[var(--text-secondary)] hover:bg-[var(--bg-card-hover)]'
                   }`}
                 >
-                  None
+                  {sub.name}
                 </button>
-                {subjects.map((sub) => (
-                  <button
-                    key={sub.id}
-                    type="button"
-                    onClick={() => {
-                      setSelectedSubject(sub.name);
-                      const cleaned = taskName.replace(/^\[.*?\]\s*/, '');
-                      setTaskName(`[${sub.name}] ${cleaned}`.trim());
+              ))}
+            </div>
+
+            {/* Task Selector: Dropdown for Pending Tasks + Input */}
+            <div className="space-y-2">
+              {pendingTasks.length > 0 && (
+                <div className="flex items-center gap-1.5">
+                  <select
+                    value={taskId || ''}
+                    onChange={(e) => {
+                      const selectedId = e.target.value;
+                      if (!selectedId) {
+                        setTaskId(null);
+                      } else {
+                        const found = pendingTasks.find((t) => t.id === selectedId);
+                        if (found) {
+                          setTaskId(found.id);
+                          setTaskName(found.text);
+                        }
+                      }
                     }}
-                    className={`px-2.5 py-0.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer truncate max-w-[130px] ${
-                      selectedSubject === sub.name
-                        ? 'bg-brand-500 text-white'
-                        : 'bg-[var(--bg-input)] text-[var(--text-secondary)] hover:bg-[var(--bg-card-hover)]'
-                    }`}
+                    className="w-full text-xs px-3 py-1.5 border border-[var(--border-default)] bg-[var(--bg-input)] text-[var(--text-primary)] rounded-xl font-medium focus:ring-2 focus:ring-brand-500 focus:outline-none cursor-pointer"
                   >
-                    {sub.name}
-                  </button>
-                ))}
-              </div>
-            )}
-            <Input
-              placeholder="What are you working on? (e.g. Chapter 3, Assignment)"
-              value={taskName}
-              onChange={(e) => setTaskName(e.target.value)}
-            />
+                    <option value="">-- Or link to an existing task --</option>
+                    {pendingTasks.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.text} ({t.priority})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <Input
+                placeholder="What are you working on? (e.g. Chapter 3, Assignment)"
+                value={taskName}
+                onChange={(e) => {
+                  setTaskName(e.target.value);
+                  if (taskId) setTaskId(null);
+                }}
+              />
+            </div>
           </div>
         )}
       </div>
+
 
       {/* Controls */}
       <div className="flex items-center gap-4">
@@ -252,24 +334,25 @@ export default function PomodoroPage() {
           {/* Mode Tabs in Zen */}
           <div className="flex gap-2 mb-8 bg-[var(--bg-card)] p-1.5 border border-[var(--border-default)] rounded-2xl shadow-sm">
             <button
-              onClick={() => setMode('work')}
+              onClick={() => handleRequestModeSwitch('work')}
               className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${mode === 'work' ? 'bg-brand-500 text-white' : 'text-[var(--text-secondary)] hover:bg-[var(--bg-card-hover)]'}`}
             >
               Focus ({workDuration}m)
             </button>
             <button
-              onClick={() => setMode('short_break')}
+              onClick={() => handleRequestModeSwitch('short_break')}
               className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${mode === 'short_break' ? 'bg-brand-500 text-white' : 'text-[var(--text-secondary)] hover:bg-[var(--bg-card-hover)]'}`}
             >
               Short Break ({shortBreakDuration}m)
             </button>
             <button
-              onClick={() => setMode('long_break')}
+              onClick={() => handleRequestModeSwitch('long_break')}
               className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${mode === 'long_break' ? 'bg-brand-500 text-white' : 'text-[var(--text-secondary)] hover:bg-[var(--bg-card-hover)]'}`}
             >
               Long Break ({longBreakDuration}m)
             </button>
           </div>
+
 
           {/* Core Timer View */}
           {renderTimerBlock(true)}
@@ -447,27 +530,28 @@ export default function PomodoroPage() {
             {/* Mode selector */}
             <div className="flex gap-2 mb-8 flex-wrap justify-center">
               <button
-                onClick={() => setMode('work')}
+                onClick={() => handleRequestModeSwitch('work')}
                 className={`px-4 py-2 rounded-xl text-sm font-medium transition-all cursor-pointer ${mode === 'work' ? 'bg-brand-500 text-white' : 'bg-[var(--bg-input)] text-[var(--text-secondary)] hover:bg-[var(--bg-card-hover)]'}`}
               >
                 <Brain size={14} className="inline mr-1.5" />
                 Focus ({workDuration}m)
               </button>
               <button
-                onClick={() => setMode('short_break')}
+                onClick={() => handleRequestModeSwitch('short_break')}
                 className={`px-4 py-2 rounded-xl text-sm font-medium transition-all cursor-pointer ${mode === 'short_break' ? 'bg-brand-500 text-white' : 'bg-[var(--bg-input)] text-[var(--text-secondary)] hover:bg-[var(--bg-card-hover)]'}`}
               >
                 <Coffee size={14} className="inline mr-1.5" />
                 Short Break ({shortBreakDuration}m)
               </button>
               <button
-                onClick={() => setMode('long_break')}
+                onClick={() => handleRequestModeSwitch('long_break')}
                 className={`px-4 py-2 rounded-xl text-sm font-medium transition-all cursor-pointer ${mode === 'long_break' ? 'bg-brand-500 text-white' : 'bg-[var(--bg-input)] text-[var(--text-secondary)] hover:bg-[var(--bg-card-hover)]'}`}
               >
                 <Coffee size={14} className="inline mr-1.5" />
                 Long Break ({longBreakDuration}m)
               </button>
             </div>
+
 
             {renderTimerBlock(false)}
           </Card>
@@ -531,7 +615,9 @@ export default function PomodoroPage() {
                         <Coffee size={14} className="text-success-500 shrink-0" />
                       )}
                       <div className="min-w-0">
-                        <p className="text-xs font-semibold text-[var(--text-primary)] truncate">{s.task || MODE_LABELS[s.type as TimerMode] || s.type}</p>
+                        <p className="text-xs font-semibold text-[var(--text-primary)] truncate">
+                          {formatSessionDisplay(s.task, s.subject_name) || MODE_LABELS[s.type as TimerMode] || s.type}
+                        </p>
                         <p className="text-[10px] text-[var(--text-tertiary)]">{s.time} · {s.duration_min}min</p>
                       </div>
                     </div>
@@ -545,6 +631,39 @@ export default function PomodoroPage() {
           </Card>
         </div>
       </div>
+
+      {/* Accidental Mode Switch Confirmation Modal */}
+      <Modal
+        open={switchModalOpen}
+        onClose={handleCloseSwitchModal}
+        title="Session in Progress"
+        width="sm"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-[var(--text-secondary)]">
+            You have completed{' '}
+            <strong className="text-[var(--text-primary)]">
+              {Math.max(1, Math.round((getDurationForMode(mode) - timeLeft) / 60))} minute(s)
+            </strong>{' '}
+            of focus. Do you want to switch to a break?
+          </p>
+
+          <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-[var(--border-default)]">
+            <Button variant="ghost" size="sm" onClick={handleCloseSwitchModal}>
+              Close
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={handleConfirmSwitchToBreak}
+              className="bg-brand-500 hover:bg-brand-600 text-white"
+            >
+              Continue to Break
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
+
 }

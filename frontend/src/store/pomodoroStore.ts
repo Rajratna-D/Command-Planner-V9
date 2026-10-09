@@ -62,6 +62,9 @@ interface PomodoroState {
   running: boolean;
   endTime: number | null; // Timestamp when timer ends
   taskName: string;
+  subjectId: string | null;
+  subjectName: string | null;
+  taskId: string | null;
   zenMode: boolean;
   autoStartBreak: boolean;
   autoStartFocus: boolean;
@@ -76,6 +79,9 @@ interface PomodoroState {
 
   setMode: (mode: TimerMode) => void;
   setTaskName: (taskName: string) => void;
+  setSubject: (subjectId: string | null, subjectName: string | null) => void;
+  setTaskId: (taskId: string | null) => void;
+  logPartialSessionAndSwitch: (nextMode: TimerMode) => Promise<void>;
   setZenMode: (zen: boolean) => void;
   setAutoStartBreak: (val: boolean) => void;
   setAutoStartFocus: (val: boolean) => void;
@@ -96,15 +102,31 @@ interface PomodoroState {
   getDurationForMode: (mode: TimerMode) => number; // seconds
 }
 
+export function getUnifiedTaskString(taskName?: string | null, subjectName?: string | null): string {
+  const cleanTask = (taskName || '').trim();
+  const cleanSub = (subjectName || '').trim();
+  if (cleanSub && cleanTask) {
+    return `[${cleanSub}] ${cleanTask}`;
+  }
+  if (cleanSub) {
+    return `[${cleanSub}]`;
+  }
+  return cleanTask || '';
+}
+
 interface ActiveSessionReceipt {
   mode: TimerMode;
   taskName: string;
+  subjectId?: string | null;
+  subjectName?: string | null;
+  taskId?: string | null;
   startTime: number;
   endTime: number | null;
   durationSec: number;
   running: boolean;
   pausedTimeLeft?: number;
 }
+
 
 const SESSION_STORAGE_KEY = 'cp-pomo-active-session';
 
@@ -157,6 +179,9 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
   const active = getStoredActiveSession();
   let initialMode: TimerMode = 'work';
   let initialTask = '';
+  let initialSubjectId: string | null = null;
+  let initialSubjectName: string | null = null;
+  let initialTaskId: string | null = null;
   let initialTimeLeft = initialWork * 60;
   let initialRunning = false;
   let initialEndTime: number | null = null;
@@ -164,6 +189,9 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
   if (active) {
     initialMode = active.mode;
     initialTask = active.taskName || '';
+    initialSubjectId = active.subjectId || null;
+    initialSubjectName = active.subjectName || null;
+    initialTaskId = active.taskId || null;
     if (active.running && active.endTime) {
       const now = Date.now();
       if (now < active.endTime) {
@@ -191,6 +219,9 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
     running: initialRunning,
     endTime: initialEndTime,
     taskName: initialTask,
+    subjectId: initialSubjectId,
+    subjectName: initialSubjectName,
+    taskId: initialTaskId,
     zenMode: false,
     autoStartBreak: typeof window !== 'undefined' ? localStorage.getItem('cp-pomo-auto-start-break') === 'true' : false,
     autoStartFocus: typeof window !== 'undefined' ? localStorage.getItem('cp-pomo-auto-start-focus') === 'true' : false,
@@ -233,7 +264,75 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
       }, 300);
     },
 
+    setSubject: (subjectId, subjectName) => {
+      set({ subjectId, subjectName });
+      const active = getStoredActiveSession();
+      if (active) {
+        saveActiveSession({ ...active, subjectId, subjectName });
+      }
+    },
+
+    setTaskId: (taskId) => {
+      set({ taskId });
+      const active = getStoredActiveSession();
+      if (active) {
+        saveActiveSession({ ...active, taskId });
+      }
+    },
+
+    logPartialSessionAndSwitch: async (nextMode: TimerMode) => {
+      const { mode, timeLeft, taskName, subjectId, subjectName, taskId, getDurationForMode } = get();
+      const totalSec = getDurationForMode(mode);
+      const elapsedSec = Math.max(0, totalSec - timeLeft);
+      const elapsedMin = Math.round(elapsedSec / 60);
+
+      saveActiveSession(null);
+
+      if (elapsedMin >= 1 && mode === 'work') {
+        const currentDate = new Date();
+        const startTimestamp = Date.now() - elapsedSec * 1000;
+        const sessionStartDate = new Date(startTimestamp);
+        const sy = sessionStartDate.getFullYear();
+        const sm = String(sessionStartDate.getMonth() + 1).padStart(2, '0');
+        const sd = String(sessionStartDate.getDate()).padStart(2, '0');
+        const startDateStr = `${sy}-${sm}-${sd}`;
+        const startTimeStr = sessionStartDate.toTimeString().slice(0, 5);
+
+        const unifiedTask = getUnifiedTaskString(taskName, subjectName);
+
+        try {
+          await pomodoroApi.createSession({
+            date: startDateStr,
+            time: currentDate.toTimeString().slice(0, 5),
+            type: mode,
+            task: unifiedTask,
+            subject_id: subjectId,
+            subject_name: subjectName,
+            task_id: taskId,
+            duration_min: elapsedMin,
+            start_time: startTimeStr,
+          });
+          await get().loadTodaySessions();
+          useAppStore.getState().addToast(
+            `Saved ${elapsedMin} min focus session! Switching to ${MODE_LABELS[nextMode]}`,
+            'success'
+          );
+        } catch {
+          useAppStore.getState().addToast('Failed to save session to server', 'error');
+        }
+      }
+
+      const targetDuration = get().getDurationForMode(nextMode);
+      set({
+        mode: nextMode,
+        running: false,
+        endTime: null,
+        timeLeft: targetDuration,
+      });
+    },
+
     setZenMode: (zenMode) => set({ zenMode }),
+
 
     setAutoStartBreak: (val) => {
       if (typeof window !== 'undefined') {
@@ -287,7 +386,7 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
     },
 
     startTimer: () => {
-      const { timeLeft, mode, taskName, getDurationForMode } = get();
+      const { timeLeft, mode, taskName, subjectId, subjectName, taskId, getDurationForMode } = get();
       if (timeLeft <= 0) return;
       const endTime = Date.now() + timeLeft * 1000;
       const durationSec = getDurationForMode(mode);
@@ -296,6 +395,9 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
       saveActiveSession({
         mode,
         taskName,
+        subjectId,
+        subjectName,
+        taskId,
         startTime,
         endTime,
         durationSec,
@@ -306,7 +408,7 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
     },
 
     pauseTimer: () => {
-      const { endTime, mode, taskName, getDurationForMode } = get();
+      const { endTime, mode, taskName, subjectId, subjectName, taskId, getDurationForMode } = get();
       let remaining = get().timeLeft;
       if (endTime) {
         remaining = Math.max(0, Math.ceil((endTime - Date.now()) / 1000));
@@ -317,6 +419,9 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
       saveActiveSession({
         mode,
         taskName,
+        subjectId,
+        subjectName,
+        taskId,
         startTime,
         endTime: null,
         durationSec,
@@ -326,6 +431,7 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
 
       set({ running: false, endTime: null, timeLeft: remaining });
     },
+
 
     toggleTimer: () => {
       const { running } = get();
@@ -382,12 +488,17 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
         const startDateStr = `${sy}-${sm}-${sd}`;
         const startTimeStr = sessionStartDate.toTimeString().slice(0, 5);
 
+        const unifiedTask = getUnifiedTaskString(active.taskName, active.subjectName);
+
         try {
           await pomodoroApi.createSession({
             date: startDateStr,
             time: timeStr,
             type: active.mode,
-            task: active.taskName,
+            task: unifiedTask,
+            subject_id: active.subjectId,
+            subject_name: active.subjectName,
+            task_id: active.taskId,
             duration_min: durationMin,
             start_time: startTimeStr,
           });
@@ -433,7 +544,7 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
 
     tick: () => {
       const {
-        running, endTime, mode, taskName, autoStartBreak, autoStartFocus,
+        running, endTime, mode, taskName, subjectId, subjectName, taskId, autoStartBreak, autoStartFocus,
         sessions, longBreakInterval, getDurationForMode
       } = get();
       if (!running || !endTime) return;
@@ -466,11 +577,16 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
         const startDateStr = `${sy}-${sm}-${sd}`;
         const startTimeStr = sessionStartDate.toTimeString().slice(0, 5);
 
+        const unifiedTask = getUnifiedTaskString(taskName, subjectName);
+
         pomodoroApi.createSession({
           date: startDateStr,
           time: currentDate.toTimeString().slice(0, 5),
           type: mode,
-          task: taskName,
+          task: unifiedTask,
+          subject_id: subjectId,
+          subject_name: subjectName,
+          task_id: taskId,
           duration_min: currentDurationMin,
           start_time: startTimeStr,
         }).then(() => {
@@ -478,6 +594,7 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
         }).catch(() => {
           useAppStore.getState().addToast('Failed to log pomodoro session', 'error');
         });
+
 
         // Determine next mode based on completed focus count
         if (mode === 'work') {

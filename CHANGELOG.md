@@ -46,7 +46,7 @@ When logging future changes, please use the following template:
 ## [9.2.0] - 2026-10-09
 
 ### Overview
-This release introduces persistent drag-and-drop task reordering across sessions and tab navigations.
+This release introduces persistent drag-and-drop task reordering, an accidental switch guard for Pomodoro breaks with partial session auto-logging, and dual subject/task session attribution.
 
 ---
 
@@ -70,6 +70,36 @@ This release introduces persistent drag-and-drop task reordering across sessions
   - Tasks reordered by drag-and-drop reverted to default order when switching tabs and returning to the Tasks tab.
 - **Outcome / Goal**:
   - Task ordering persists seamlessly across tab switches, reloads, and multi-device synchronizations.
+
+---
+
+### 2. Pomodoro Break Accidental Switch Guard & Dual Subject/Task Selection
+- **Type**: Feature / Bugfix / Minor
+- **Affected Files**:
+  - `backend/models/pomodoro.py` (`PomodoroSession.subject_id`, `subject_name`, `task_id`)
+  - `backend/database.py` (`run_migrations`)
+  - `backend/schemas/schemas.py` (`PomodoroSessionCreate`, `PomodoroSessionResponse`)
+  - `backend/routers/pomodoro.py` (`create_pomodoro_session`)
+  - `frontend/src/types.ts` (`PomodoroSession`, `PomodoroSessionCreate`)
+  - `frontend/src/store/pomodoroStore.ts` (`logPartialSessionAndSwitch`, `setSubject`, `setTaskId`)
+  - `frontend/src/pages/PomodoroPage.tsx` (Confirmation modal, Dual Selector, Today's sessions panel)
+  - `frontend/src/components/charts/HeatmapCalendar.tsx` (`formatSessionDisplay`)
+  - `backend/tests/test_pomodoro.py` (`test_dual_selection_session`)
+- **What Changed**:
+  - Intercepted mode switches (both normal and Zen mode) when an active timer is running with elapsed focus time.
+  - Added warning modal: *"You have completed X mins of focus. Do you want to switch?"* with options:
+    - **Continue to Break**: Logs completed minutes (if >= 1 min) to database and transitions to break mode without losing progress.
+    - **Close**: Cancels switch and keeps the active timer running uninterrupted.
+  - Added database columns `subject_id`, `subject_name`, and `task_id` to `pomodoro_sessions`.
+  - Built dual selector allowing all three usage combinations:
+    1. Both subject and task: logged and formatted as `[SUBJECT] TASK`.
+    2. Task only: logged as `TASK`.
+    3. Subject only: logged as `[SUBJECT]`.
+  - Updated Today's Sessions side panel and Heatmap calendar inspector to display sessions in this unified format.
+- **Reason Behind the Change**:
+  - Accidentally clicking short/long break immediately terminated the timer and discarded completed focus time. Users also needed flexibility to log general non-subject tasks or subject-only study blocks.
+- **Outcome / Goal**:
+  - No focus time is lost on accidental break clicks, and sessions retain clear subject/task attribution throughout the UI.
 
 ---
 

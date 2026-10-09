@@ -80,6 +80,17 @@ def run_migrations():
         if task_columns and "order" not in task_columns:
             cursor.execute('ALTER TABLE tasks ADD COLUMN "order" INTEGER DEFAULT 0')
 
+        # Check pomodoro_sessions table for subject_id, subject_name, task_id
+        cursor.execute("PRAGMA table_info(pomodoro_sessions)")
+        pomo_columns = [row[1] for row in cursor.fetchall()]
+        if pomo_columns:
+            if "subject_id" not in pomo_columns:
+                cursor.execute("ALTER TABLE pomodoro_sessions ADD COLUMN subject_id TEXT")
+            if "subject_name" not in pomo_columns:
+                cursor.execute("ALTER TABLE pomodoro_sessions ADD COLUMN subject_name TEXT")
+            if "task_id" not in pomo_columns:
+                cursor.execute("ALTER TABLE pomodoro_sessions ADD COLUMN task_id TEXT")
+
         conn.commit()
         conn.close()
     except Exception as e:

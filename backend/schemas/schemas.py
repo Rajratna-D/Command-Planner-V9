@@ -218,6 +218,9 @@ class PomodoroSessionCreate(BaseModel):
     time: str = Field(default="", max_length=20)
     type: str = Field(default="work", max_length=20)
     task: str = Field(default="", max_length=200)
+    subject_id: str | None = Field(default=None, max_length=100)
+    subject_name: str | None = Field(default=None, max_length=200)
+    task_id: str | None = Field(default=None, max_length=100)
     duration_min: int = Field(default=25, ge=1, le=1440)
     start_time: str | None = Field(default=None, max_length=20)  # HH:MM — used to detect midnight-spanning sessions
 
@@ -227,6 +230,9 @@ class PomodoroSessionResponse(BaseModel):
     time: str
     type: str
     task: str
+    subject_id: str | None = None
+    subject_name: str | None = None
+    task_id: str | None = None
     duration_min: int
     created_at: datetime
 

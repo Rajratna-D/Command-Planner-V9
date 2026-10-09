@@ -90,3 +90,24 @@ def test_midnight_session_split(client):
 
     assert any(s["duration_min"] == 105 and s["time"] == "22:15" for s in log_prev)
     assert any(s["duration_min"] == 15 and s["time"] == "00:00" for s in log_next)
+
+
+def test_dual_selection_session(client):
+    # Test session with both subject and task metadata
+    res = client.post("/pomodoro/sessions", json={
+        "date": "2026-06-25",
+        "time": "14:00",
+        "type": "work",
+        "task": "[Biology] Cell Structure",
+        "subject_name": "Biology",
+        "subject_id": "bio-123",
+        "task_id": "task-456",
+        "duration_min": 45
+    })
+    assert res.status_code == 201
+    data = res.json()
+    assert data["subject_name"] == "Biology"
+    assert data["subject_id"] == "bio-123"
+    assert data["task_id"] == "task-456"
+    assert data["duration_min"] == 45
+

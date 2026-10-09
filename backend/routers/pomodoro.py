@@ -79,9 +79,13 @@ def log_session(data: PomodoroSessionCreate, db: Session = Depends(get_db)):
             time=part_time,
             type=data.type,
             task=data.task,
+            subject_id=data.subject_id,
+            subject_name=data.subject_name,
+            task_id=data.task_id,
             duration_min=part_dur,
             created_at=utcnow(),
         )
+
         db.add(session)
         created_sessions.append(session)
 

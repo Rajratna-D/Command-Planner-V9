@@ -17,5 +17,9 @@ class PomodoroSession(Base):
     time: Mapped[str] = mapped_column(String, default="")  # HH:MM
     type: Mapped[str] = mapped_column(String, default="work", index=True)  # work, break, long_break
     task: Mapped[str] = mapped_column(String, default="")
+    subject_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    subject_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    task_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
     duration_min: Mapped[int] = mapped_column(Integer, default=25)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+

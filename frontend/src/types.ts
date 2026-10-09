@@ -139,6 +139,9 @@ export interface PomodoroSession {
   time: string;
   type: 'work' | 'short_break' | 'long_break';
   task: string;
+  subject_id?: string | null;
+  subject_name?: string | null;
+  task_id?: string | null;
   duration_min: number;
   created_at: string;
 }
@@ -147,6 +150,9 @@ export interface PomodoroSessionCreate {
   time?: string;
   type?: string;
   task?: string;
+  subject_id?: string | null;
+  subject_name?: string | null;
+  task_id?: string | null;
   duration_min?: number;
   start_time?: string;  // HH:MM — session start time for midnight-split detection
 }
