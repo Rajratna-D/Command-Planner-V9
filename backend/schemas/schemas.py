@@ -38,6 +38,8 @@ class TaskResponse(BaseModel):
     tags: list[str] = []
     archived: bool = False
     order: int = 0
+    parent_task_id: str | None = None
+    is_upcoming: bool = False
 
     @field_validator("tags", mode="before")
     @classmethod

@@ -69,7 +69,7 @@ export default function PomodoroPage() {
 
   const loadDependencies = useCallback(() => {
     syllabusApi.list().then(setSubjects).catch(() => {});
-    tasksApi.list(false).then(setPendingTasks).catch(() => {});
+    tasksApi.list(false, false).then(setPendingTasks).catch(() => {});
   }, []);
 
   useEffect(() => {

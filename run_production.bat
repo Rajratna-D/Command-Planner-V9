@@ -6,7 +6,7 @@ echo =======================================================
 
 :: Resolve any processes currently occupying port 8000 to prevent startup errors
 echo [1/3] Checking for port 8000 conflicts...
-powershell -Command "Stop-Process -Id (Get-NetTCPConnection -LocalPort 8000 -ErrorAction SilentlyContinue).OwningProcess -Force -ErrorAction SilentlyContinue"
+powershell -Command "try { (Get-NetTCPConnection -LocalPort 8000 -ErrorAction Stop).OwningProcess | Select-Object -Unique | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue } } catch { exit 0 }"
 
 
 :: Start the FastAPI backend server in PRODUCTION mode
@@ -14,7 +14,7 @@ powershell -Command "Stop-Process -Id (Get-NetTCPConnection -LocalPort 8000 -Err
 :: • --log-level warning: Suppress debug/info output, hide stack traces from stdout
 :: • No --reload       : No filesystem watcher overhead, no accidental restarts
 echo [2/3] Starting FastAPI Backend on port 8000 (Production)...
-start /b "" ".\.venv\Scripts\uvicorn" backend.main:app --host 127.0.0.1 --port 8000 --log-level warning
+start /b "" ".\.venv\Scripts\python.exe" -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
 
 :: Give the backend server a moment to spin up
 timeout /t 2 /nobreak > nul

@@ -93,9 +93,9 @@ export default function TasksPage() {
   });
 
   // Grouping states with localStorage persistence
-  const [groupBy, setGroupBy] = useState<'none' | 'priority' | 'due'>(() => {
+  const [groupBy, setGroupBy] = useState<'none' | 'priority' | 'due' | 'upcoming'>(() => {
     if (typeof window === 'undefined') return 'none';
-    return (localStorage.getItem('cp-tasks-group-by') as 'none' | 'priority' | 'due') || 'none';
+    return (localStorage.getItem('cp-tasks-group-by') as 'none' | 'priority' | 'due' | 'upcoming') || 'none';
   });
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>(() => {
     if (typeof window === 'undefined') return {};
@@ -114,7 +114,7 @@ export default function TasksPage() {
     }
   }, []);
 
-  const handleSetGroupBy = useCallback((g: 'none' | 'priority' | 'due') => {
+  const handleSetGroupBy = useCallback((g: 'none' | 'priority' | 'due' | 'upcoming') => {
     setGroupBy(g);
     if (typeof window !== 'undefined') {
       localStorage.setItem('cp-tasks-group-by', g);
@@ -146,12 +146,12 @@ export default function TasksPage() {
   );
 
   const load = useCallback(() => {
-    const done = filter === 'all' ? undefined : filter === 'done';
+    const done = groupBy === 'upcoming' ? undefined : (filter === 'all' ? undefined : filter === 'done');
     tasksApi.list(done)
       .then(setTasks)
       .catch(() => addToast('Failed to load tasks', 'error'))
       .finally(() => setLoading(false));
-  }, [filter, addToast]);
+  }, [filter, groupBy, addToast]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -304,13 +304,47 @@ export default function TasksPage() {
     return 'Later';
   }, []);
 
+  const formatUpcomingBadge = useCallback((task: Task) => {
+    if (task.is_upcoming && task.due) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const target = new Date(task.due + 'T00:00:00');
+      const diffDays = Math.round((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+
+      if (diffDays === 1) return 'Tomorrow';
+      if (diffDays > 1 && diffDays <= 7) {
+        const weekday = target.toLocaleDateString(undefined, { weekday: 'short' });
+        const monthDay = target.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+        return `${weekday}, ${monthDay}`;
+      }
+      return target.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    }
+    if (task.recur === 'Daily') return 'Due Today';
+    if (task.recur === 'Weekly') return 'This Week';
+    if (task.recur === 'Monthly') return 'This Month';
+    return task.due || 'Scheduled';
+  }, []);
+
+  const getGroupIcon = useCallback((name: string) => {
+    if (name === 'Daily Tasks') return <RotateCcw size={14} className="text-brand-500" />;
+    if (name === 'Weekly Tasks') return <Calendar size={14} className="text-accent-500" />;
+    if (name === 'Monthly Tasks') return <Calendar size={14} className="text-warning-500" />;
+    return null;
+  }, []);
+
   const filteredTasks = selectedTag 
     ? tasks.filter((t) => t.tags && t.tags.includes(selectedTag))
     : tasks;
 
+  // In regular views (Flat List, Priority, Due Date), exclude future recurring tasks (is_upcoming)
+  // In 'upcoming' view, display all recurring habits (Daily, Weekly, Monthly) and future instances
+  const currentTasks = groupBy === 'upcoming'
+    ? filteredTasks.filter((t) => (t.recur !== 'None' || t.is_upcoming) && !t.done)
+    : filteredTasks.filter((t) => !t.is_upcoming);
+
   const groups: Record<string, Task[]> = {};
   if (groupBy === 'none') {
-    groups['All Tasks'] = filteredTasks;
+    groups['All Tasks'] = currentTasks;
   } else if (groupBy === 'priority') {
     groups['Immediate'] = [];
     groups['Important'] = [];
@@ -318,7 +352,7 @@ export default function TasksPage() {
     groups['3rd Priority'] = [];
     groups['Someday'] = [];
     
-    filteredTasks.forEach((t) => {
+    currentTasks.forEach((t) => {
       const g = t.priority === '2nd Priority' ? '2nd Priority' : t.priority === '3rd Priority' ? '3rd Priority' : t.priority;
       if (groups[g]) groups[g].push(t);
       else groups[g] = [t];
@@ -331,10 +365,21 @@ export default function TasksPage() {
     groups['Later'] = [];
     groups['Someday / No Date'] = [];
 
-    filteredTasks.forEach((t) => {
+    currentTasks.forEach((t) => {
       const g = getDueDateGroup(t);
       if (groups[g]) groups[g].push(t);
       else groups[g] = [t];
+    });
+  } else if (groupBy === 'upcoming') {
+    groups['Daily Tasks'] = [];
+    groups['Weekly Tasks'] = [];
+    groups['Monthly Tasks'] = [];
+
+    currentTasks.forEach((t) => {
+      if (t.recur === 'Daily') groups['Daily Tasks'].push(t);
+      else if (t.recur === 'Weekly') groups['Weekly Tasks'].push(t);
+      else if (t.recur === 'Monthly') groups['Monthly Tasks'].push(t);
+      else groups['Daily Tasks'].push(t);
     });
   }
 
@@ -391,7 +436,8 @@ export default function TasksPage() {
         <div>
           <h2 className="text-2xl font-bold tracking-tight text-[var(--text-primary)]">Tasks</h2>
           <p className="text-sm text-[var(--text-secondary)]">
-            {tasks.filter((t) => !t.done).length} pending · {tasks.filter((t) => t.done).length} completed
+            {tasks.filter((t) => !t.done && !t.is_upcoming).length} active today · {tasks.filter((t) => t.done).length} completed
+            {tasks.filter((t) => t.is_upcoming).length > 0 && ` · ${tasks.filter((t) => t.is_upcoming).length} upcoming`}
           </p>
         </div>
         <div className="flex items-center gap-3 flex-wrap">
@@ -412,12 +458,13 @@ export default function TasksPage() {
             </span>
             <select
               value={groupBy}
-              onChange={(e) => handleSetGroupBy(e.target.value as 'none' | 'priority' | 'due')}
+              onChange={(e) => handleSetGroupBy(e.target.value as 'none' | 'priority' | 'due' | 'upcoming')}
               className="px-2.5 py-1.5 border border-[var(--border-default)] bg-[var(--bg-card)] text-[var(--text-primary)] rounded-xl text-xs font-semibold cursor-pointer"
             >
               <option value="none">Flat List</option>
               <option value="priority">Priority</option>
               <option value="due">Due Date</option>
+              <option value="upcoming">Upcoming Tasks</option>
             </select>
           </div>
 
@@ -449,16 +496,20 @@ export default function TasksPage() {
         <div className="space-y-3 stagger">
           {Array.from({ length: 5 }).map((_, i) => <div key={i} className="skeleton h-16 rounded-xl" />)}
         </div>
-      ) : tasks.length === 0 ? (
+      ) : currentTasks.length === 0 ? (
         <Card className="text-center py-12">
-          <p className="text-[var(--text-tertiary)]">No tasks yet. Create one!</p>
+          <p className="text-[var(--text-tertiary)]">
+            {groupBy === 'upcoming' 
+              ? 'No upcoming recurring tasks scheduled yet. Once you complete daily, weekly, or monthly tasks, their next scheduled cycles will appear here.'
+              : 'No tasks yet. Create one!'}
+          </p>
         </Card>
       ) : (
         <div className="space-y-6">
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
             {Object.keys(groups).map((groupName) => {
               const groupTasks = groups[groupName] || [];
-              if (groupBy !== 'none' && groupTasks.length === 0) return null;
+              if (groupBy !== 'none' && groupBy !== 'upcoming' && groupTasks.length === 0) return null;
               
               const isCollapsed = !!collapsedGroups[groupName];
 
@@ -471,6 +522,7 @@ export default function TasksPage() {
                       className="flex items-center gap-2 text-sm font-bold text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer transition-colors w-full text-left"
                     >
                       {isCollapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
+                      {getGroupIcon(groupName)}
                       <span className="capitalize">{groupName}</span>
                       <span className="text-xs font-semibold px-2 py-0.5 bg-[var(--bg-card-hover)] text-[var(--text-tertiary)] rounded-full">
                         {groupTasks.length}
@@ -480,33 +532,48 @@ export default function TasksPage() {
 
                   {/* Group Body */}
                   {!isCollapsed && (
-                    <div className="space-y-2 stagger">
-                      <SortableContext items={groupTasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
-                        {groupTasks.map((task) => (
-                          <SortableItem key={task.id} id={task.id}>
-                            <Card hoverable className="flex items-center gap-3 !py-3 w-full pr-4">
-                              {/* Animated Checkbox */}
-                              <AnimatedCheckbox
-                                checked={task.done}
-                                onChange={() => toggleDone(task)}
-                              />
+                    groupTasks.length === 0 ? (
+                      <div className="py-2.5 px-3.5 rounded-xl bg-[var(--bg-card)] border border-[var(--border-default)] text-xs text-[var(--text-tertiary)] italic">
+                        No {groupName.toLowerCase()} scheduled
+                      </div>
+                    ) : (
+                      <div className="space-y-2 stagger">
+                        <SortableContext items={groupTasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
+                          {groupTasks.map((task) => (
+                            <SortableItem key={task.id} id={task.id}>
+                              <Card hoverable className="flex items-center gap-3 !py-3 w-full pr-4">
+                                {/* Animated Checkbox */}
+                                <AnimatedCheckbox
+                                  checked={task.done}
+                                  onChange={() => toggleDone(task)}
+                                />
 
-                              {/* Content */}
-                              <div className="flex-1 min-w-0">
-                                <p className={`text-sm font-medium ${task.done ? 'line-through text-[var(--text-tertiary)]' : 'text-[var(--text-primary)]'}`}>
-                                  {task.text}
-                                </p>
-                                <div className="flex flex-wrap items-center gap-2 mt-1">
-                                  {task.due && (
-                                    <span className="flex items-center gap-1 text-[11px] text-[var(--text-tertiary)] font-semibold">
-                                      <Calendar size={11} /> {task.due}
-                                    </span>
-                                  )}
-                                  {task.recur !== 'None' && (
-                                    <span className="flex items-center gap-1 text-[11px] text-accent-500 font-semibold">
-                                      <RotateCcw size={11} /> {task.recur}
-                                    </span>
-                                  )}
+                                {/* Content */}
+                                <div className="flex-1 min-w-0">
+                                  <p className={`text-sm font-medium ${task.done ? 'line-through text-[var(--text-tertiary)]' : 'text-[var(--text-primary)]'}`}>
+                                    {task.text}
+                                  </p>
+                                  <div className="flex flex-wrap items-center gap-2 mt-1">
+                                    {task.is_upcoming || groupBy === 'upcoming' ? (
+                                      <span className={`flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-md ${
+                                        task.is_upcoming ? 'text-brand-500 bg-brand-500/10' : 'text-accent-500 bg-accent-500/10'
+                                      }`}>
+                                        <RotateCcw size={11} /> {task.is_upcoming ? `Next: ${formatUpcomingBadge(task)}` : formatUpcomingBadge(task)}
+                                      </span>
+                                    ) : (
+                                      <>
+                                        {task.due && (
+                                          <span className="flex items-center gap-1 text-[11px] text-[var(--text-tertiary)] font-semibold">
+                                            <Calendar size={11} /> {task.due}
+                                          </span>
+                                        )}
+                                        {task.recur !== 'None' && (
+                                          <span className="flex items-center gap-1 text-[11px] text-accent-500 font-semibold">
+                                            <RotateCcw size={11} /> {task.recur}
+                                          </span>
+                                        )}
+                                      </>
+                                    )}
                                   
                                   {/* Custom Tags */}
                                   {task.tags && task.tags.length > 0 && (
@@ -579,7 +646,7 @@ export default function TasksPage() {
                         ))}
                       </SortableContext>
                     </div>
-                  )}
+                  ))}
                 </div>
               );
             })}

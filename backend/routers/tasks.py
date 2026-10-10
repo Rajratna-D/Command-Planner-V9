@@ -13,11 +13,17 @@ PRIORITY_ORDER = ["Immediate", "Important", "2nd Priority", "3rd Priority", "Som
 
 
 @router.get("", response_model=list[TaskResponse])
-def get_tasks(done: bool | None = None, db: Session = Depends(get_db)):
+def get_tasks(
+    done: bool | None = None,
+    upcoming: bool | None = None,
+    db: Session = Depends(get_db)
+):
     q = db.query(Task).filter(Task.archived == False)
     if done is not None:
         q = q.filter(Task.done == done)
     tasks = q.all()
+    if upcoming is not None:
+        tasks = [t for t in tasks if t.is_upcoming == upcoming]
     # Sort by completion, then custom order if present, then priority order
     tasks.sort(key=lambda t: (
         t.done,
@@ -60,12 +66,26 @@ def update_task(task_id: str, data: TaskUpdate, db: Session = Depends(get_db)):
         else:
             setattr(task, field, value)
 
-    # Handle recurrence: when marking done, spawn next instance
+    # Handle recurrence: when marking done, spawn next instance for next scheduled period
     if not was_done and task.done and task.recur != "None" and not task.spawned:
-        task.spawned = True
-        delta = {"Daily": 1, "Weekly": 7, "Monthly": 30}.get(task.recur, 0)
-        if delta:
-            new_due = (date.today() + timedelta(days=delta)).isoformat()
+        today = date.today()
+        new_due = None
+        if task.recur == "Daily":
+            new_due = (today + timedelta(days=1)).isoformat()
+        elif task.recur == "Weekly":
+            # Next Monday: 7 - weekday (Monday is 0, Sunday is 6)
+            days_to_monday = 7 - today.weekday()
+            new_due = (today + timedelta(days=days_to_monday)).isoformat()
+        elif task.recur == "Monthly":
+            # 1st of next month
+            if today.month == 12:
+                next_month_1st = date(today.year + 1, 1, 1)
+            else:
+                next_month_1st = date(today.year, today.month + 1, 1)
+            new_due = next_month_1st.isoformat()
+
+        if new_due:
+            task.spawned = True
             new_task = Task(
                 id=str(uuid.uuid4()),
                 text=task.text,
@@ -74,8 +94,20 @@ def update_task(task_id: str, data: TaskUpdate, db: Session = Depends(get_db)):
                 recur=task.recur,
                 added_at=utcnow(),
                 tags=task.tags,
+                order=task.order,
+                parent_task_id=task.id,
             )
             db.add(new_task)
+
+    # Handle unchecking recurrence: cancel/delete spawned future instance so no duplicate is created
+    if was_done and not task.done and task.spawned:
+        uncompleted_children = db.query(Task).filter(
+            Task.parent_task_id == task.id,
+            Task.done == False
+        ).all()
+        for child in uncompleted_children:
+            db.delete(child)
+        task.spawned = False
 
     db.commit()
     db.refresh(task)

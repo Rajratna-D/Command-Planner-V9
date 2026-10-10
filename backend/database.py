@@ -74,11 +74,14 @@ def run_migrations():
             if columns and "archived" not in columns:
                 cursor.execute(f"ALTER TABLE {table} ADD COLUMN archived BOOLEAN DEFAULT 0")
 
-        # Check tasks table for order column
+        # Check tasks table for order and parent_task_id columns
         cursor.execute("PRAGMA table_info(tasks)")
         task_columns = [row[1] for row in cursor.fetchall()]
-        if task_columns and "order" not in task_columns:
-            cursor.execute('ALTER TABLE tasks ADD COLUMN "order" INTEGER DEFAULT 0')
+        if task_columns:
+            if "order" not in task_columns:
+                cursor.execute('ALTER TABLE tasks ADD COLUMN "order" INTEGER DEFAULT 0')
+            if "parent_task_id" not in task_columns:
+                cursor.execute('ALTER TABLE tasks ADD COLUMN parent_task_id TEXT')
 
         # Check pomodoro_sessions table for subject_id, subject_name, task_id
         cursor.execute("PRAGMA table_info(pomodoro_sessions)")

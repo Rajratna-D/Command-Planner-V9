@@ -176,7 +176,13 @@ import type {
 
 // ── Tasks ──────────────────────────────────────────────────────────────────
 export const tasksApi = {
-  list: (done?: boolean) => get<Task[]>(`/tasks${done !== undefined ? `?done=${done}` : ''}`),
+  list: (done?: boolean, upcoming?: boolean) => {
+    const params = new URLSearchParams();
+    if (done !== undefined) params.set('done', String(done));
+    if (upcoming !== undefined) params.set('upcoming', String(upcoming));
+    const qs = params.toString();
+    return get<Task[]>(`/tasks${qs ? `?${qs}` : ''}`);
+  },
   create: (data: TaskCreate) => post<Task>('/tasks', data),
   update: (id: string, data: TaskUpdate) => patch<Task>(`/tasks/${id}`, data),
   delete: (id: string) => del<void>(`/tasks/${id}`),

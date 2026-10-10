@@ -38,9 +38,10 @@ def get_overview(db: Session = Depends(get_db)):
         key=lambda t: t.date
     )
 
-    # Pending tasks count and top 5 priority tasks
-    tasks_count = db.query(Task).filter(Task.done == False, Task.archived == False).count()
-    pending_tasks = db.query(Task).filter(Task.done == False, Task.archived == False).all()
+    # Pending tasks count and top 5 priority tasks (excluding future scheduled recurring tasks)
+    all_pending = db.query(Task).filter(Task.done == False, Task.archived == False).all()
+    pending_tasks = [t for t in all_pending if not t.is_upcoming]
+    tasks_count = len(pending_tasks)
     pending_tasks.sort(
         key=lambda t: PRIORITY_ORDER.index(t.priority)
         if t.priority in PRIORITY_ORDER else 99

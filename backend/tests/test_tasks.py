@@ -77,3 +77,90 @@ def test_reorder_tasks(client):
     assert filtered[1]["id"] == r1["id"]
     assert filtered[2]["id"] == r2["id"]
 
+
+def test_daily_recurrence_and_upcoming_filtering(client):
+    from datetime import date, timedelta
+    today = date.today()
+    tomorrow = (today + timedelta(days=1)).isoformat()
+
+    r = client.post("/tasks", json={"text": "Daily Workout", "priority": "Immediate", "recur": "Daily"}).json()
+    task_id = r["id"]
+
+    # Mark done
+    update_res = client.patch(f"/tasks/{task_id}", json={"done": True})
+    assert update_res.status_code == 200
+    updated_task = update_res.json()
+    assert updated_task["done"] is True
+    assert updated_task["is_upcoming"] is False
+
+    # Fetch all tasks
+    all_tasks = client.get("/tasks").json()
+    spawned = [t for t in all_tasks if t.get("parent_task_id") == task_id]
+    assert len(spawned) == 1
+    assert spawned[0]["due"] == tomorrow
+    assert spawned[0]["done"] is False
+    assert spawned[0]["is_upcoming"] is True
+
+    # Filter upcoming=False (current tasks only)
+    current_only = client.get("/tasks?upcoming=false").json()
+    assert any(t["id"] == task_id for t in current_only)
+    assert not any(t["id"] == spawned[0]["id"] for t in current_only)
+
+    # Filter upcoming=True (future upcoming tasks only)
+    upcoming_only = client.get("/tasks?upcoming=true").json()
+    assert any(t["id"] == spawned[0]["id"] for t in upcoming_only)
+    assert not any(t["id"] == task_id for t in upcoming_only)
+
+
+def test_weekly_and_monthly_recurrence_dates(client):
+    from datetime import date, timedelta
+    today = date.today()
+
+    # Weekly
+    days_to_monday = 7 - today.weekday()
+    expected_monday = (today + timedelta(days=days_to_monday)).isoformat()
+
+    w = client.post("/tasks", json={"text": "Weekly Review", "recur": "Weekly"}).json()
+    client.patch(f"/tasks/{w['id']}", json={"done": True})
+
+    all_tasks = client.get("/tasks").json()
+    w_spawned = [t for t in all_tasks if t.get("parent_task_id") == w["id"]]
+    assert len(w_spawned) == 1
+    assert w_spawned[0]["due"] == expected_monday
+    assert w_spawned[0]["is_upcoming"] is True
+
+    # Monthly
+    if today.month == 12:
+        expected_first = date(today.year + 1, 1, 1).isoformat()
+    else:
+        expected_first = date(today.year, today.month + 1, 1).isoformat()
+
+    m = client.post("/tasks", json={"text": "Monthly Budget", "recur": "Monthly"}).json()
+    client.patch(f"/tasks/{m['id']}", json={"done": True})
+
+    all_tasks = client.get("/tasks").json()
+    m_spawned = [t for t in all_tasks if t.get("parent_task_id") == m["id"]]
+    assert len(m_spawned) == 1
+    assert m_spawned[0]["due"] == expected_first
+    assert m_spawned[0]["is_upcoming"] is True
+
+
+def test_unchecking_recurrence_cancels_spawned_task(client):
+    r = client.post("/tasks", json={"text": "Daily Read", "recur": "Daily"}).json()
+    task_id = r["id"]
+
+    # Mark done -> spawns child
+    client.patch(f"/tasks/{task_id}", json={"done": True})
+    tasks = client.get("/tasks").json()
+    spawned = [t for t in tasks if t.get("parent_task_id") == task_id]
+    assert len(spawned) == 1
+
+    # Accidental uncheck -> should delete child
+    uncheck_res = client.patch(f"/tasks/{task_id}", json={"done": False})
+    assert uncheck_res.status_code == 200
+    assert uncheck_res.json()["done"] is False
+
+    tasks_after = client.get("/tasks").json()
+    spawned_after = [t for t in tasks_after if t.get("parent_task_id") == task_id]
+    assert len(spawned_after) == 0
+

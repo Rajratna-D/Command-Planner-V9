@@ -35,17 +35,17 @@ When logging future changes, please use the following template:
 
 ## Versions & Releases
 
-- [9.2.0 - 2026-10-09 (Task Reordering, Pomodoro Switch Guard, Smart Hit Rate, Subject Breakdown & Historical Reports)](#920---2026-10-09)
+- [9.2.0 - 2026-10-11 (Task Ordering, Pomodoro Guard, Historical Reports, Smart Recurrence & Launcher Hardening)](#920---2026-10-11)
 - [9.1.0 - 2026-09-12 (Security Hardening, Production Architecture & Guides)](#910---2026-09-12)
 - [9.0.0 - 2026-09-11 (Command Planner V9 Full-Stack Architecture Launch)](#900---2026-09-11)
 - [Legacy Architecture (V1 - V8)](#legacy-architecture-v1---v8)
 
 ---
 
-## [9.2.0] - 2026-10-09
+## [9.2.0] - 2026-10-11
 
 ### Overview
-This release addresses 3 critical workflow and calculation bugs across Tasks, Pomodoro, and Productivity analytics, enhances subject/task dual association for study sessions, and introduces a comprehensive historical weekly/monthly progress and reporting engine.
+This release addresses 4 critical workflow and calculation bugs across Tasks, Pomodoro, and Productivity analytics, enhances subject/task dual association for study sessions, introduces a comprehensive historical weekly/monthly progress and reporting engine, implements smart recurring tasks scheduling with dedicated upcoming groupings, and hardens application launcher scripts against port conflict false-positives.
 
 ---
 
@@ -139,6 +139,53 @@ This release addresses 3 critical workflow and calculation bugs across Tasks, Po
   - User requested a centralized historical view to evaluate weekly and monthly progress over time with downloadable progress reports, and resolved modal rendering issues caused by CSS animation transforms.
 - **Outcome / Goal**:
   - Users can review long-term study consistency and export professional CSV and printable PDF reports anytime with zero layout clipping.
+
+---
+
+### 5. Smart Recurring Tasks Scheduling & Upcoming Tasks Grouping
+- **Type**: Bugfix / Feature / Minor
+- **Affected Files**:
+  - `backend/models/task.py` (`Task.parent_task_id`, `Task.is_upcoming`)
+  - `backend/database.py` (`run_migrations`)
+  - `backend/schemas/schemas.py` (`TaskResponse.parent_task_id`, `TaskResponse.is_upcoming`)
+  - `backend/routers/tasks.py` (`get_tasks`, `update_task`)
+  - `backend/routers/analytics.py` (`get_overview`)
+  - `backend/tests/test_tasks.py` (`test_daily_recurrence_and_upcoming_filtering`, `test_weekly_and_monthly_recurrence_dates`, `test_unchecking_recurrence_cancels_spawned_task`)
+  - `frontend/src/types.ts` (`Task.parent_task_id`, `Task.is_upcoming`)
+  - `frontend/src/api/client.ts` (`tasksApi.list`)
+  - `frontend/src/pages/TasksPage.tsx` (`groupBy`, `Upcoming Tasks` view, `currentTasks`, `formatUpcomingBadge`)
+  - `frontend/src/pages/PomodoroPage.tsx` (task dropdown filter)
+- **What Changed**:
+  - Resolved immediate duplicate task clutter when ticking recurring tasks.
+  - Implemented exact next-cycle date calculations:
+    - Daily: schedules for tomorrow (`today + 1`).
+    - Weekly: schedules for next Monday (`today + (7 - weekday)`).
+    - Monthly: schedules for the 1st of next month.
+  - Automatically hidden future recurring cycles (`is_upcoming = true`) from current day active views (`Flat List`, `Priority`, `Due Date`). Once completed today, the task remains logged in `Done`, but does not spawn a duplicate active task on the same day.
+  - Added `Upcoming Tasks` to the `Group By:` dropdown with 3 dedicated sections (`Daily Tasks`, `Weekly Tasks`, `Monthly Tasks`), displaying scheduled badges (`Next: Tomorrow`, `Next: Mon, Oct 19`, `Next: Nov 1`) alongside pending recurring habits.
+  - Built an accidental uncheck guard: unticking a completed recurring task on the same day reverts the task to active and automatically deletes the future spawned cycle.
+  - Excluded future recurring cycles from Overview pending tasks count and Pomodoro active tasks selector.
+- **Reason Behind the Change**:
+  - Ticking a daily task immediately generated a duplicate active task on the same day, cluttering the user's focus list and dashboard. Users also required a clear, dedicated grouping to preview upcoming recurring habits.
+- **Outcome / Goal**:
+  - Zero duplicate tasks appear on the same day once completed. Upcoming recurring habits are cleanly organized by Daily, Weekly, and Monthly cycles under `Group: Upcoming Tasks`.
+
+---
+
+### 6. Launcher Script Port Conflict Handling & Process Execution Hardening
+- **Type**: Bugfix / Patch
+- **Affected Files**:
+  - `run_production.bat` (Port cleanup check & uvicorn startup command)
+  - `run.bat` (Port cleanup check & uvicorn startup command)
+- **What Changed**:
+  - Eliminated PowerShell `ParameterArgumentValidationErrorNullNotAllowed` error (`Stop-Process : Cannot bind argument to parameter 'Id' because it is null`) when launching scripts with port 8000 unoccupied.
+  - Wrapped port conflict termination inside a resilient `try { (Get-NetTCPConnection ...).OwningProcess | Select-Object -Unique | ForEach-Object { Stop-Process -Id $_ -Force } } catch { exit 0 }` block.
+  - Replaced ambiguous executable invocations (`.\.venv\Scripts\uvicorn`) with explicit Python module execution (`.\.venv\Scripts\python.exe -m uvicorn`) to prevent silent process launch failures on Windows.
+  - Adjusted production startup logging in `run_production.bat` to display normal info confirmation messages on boot (`Uvicorn running on http://127.0.0.1:8000`) so users receive immediate, unambiguous visual verification that the backend is operational.
+- **Reason Behind the Change**:
+  - When starting the application with port 8000 already free, the pre-check threw an alarming red parameter binding error in the console. Suppressed logging in production mode subsequently hid Uvicorn startup messages, misleading users into believing port 8000 had failed to start.
+- **Outcome / Goal**:
+  - Both `run.bat` and `run_production.bat` start cleanly with zero errors when ports are free, and provide instant visual confirmation that the backend server is running.
 
 ---
 

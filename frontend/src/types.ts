@@ -15,6 +15,8 @@ export interface Task {
   tags?: string[];
   archived: boolean;
   order?: number;
+  parent_task_id?: string | null;
+  is_upcoming?: boolean;
 }
 
 export type Priority = 'Immediate' | 'Important' | '2nd Priority' | '3rd Priority' | 'Someday';

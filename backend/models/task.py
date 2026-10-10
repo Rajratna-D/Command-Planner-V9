@@ -1,6 +1,6 @@
 """Task model — priority-sorted tasks with recurrence support."""
 import uuid
-from datetime import datetime
+from datetime import datetime, date
 from sqlalchemy import String, Boolean, DateTime, Integer
 from sqlalchemy.orm import Mapped, mapped_column
 from backend.database import Base, utcnow
@@ -20,5 +20,12 @@ class Task(Base):
     tags: Mapped[str | None] = mapped_column(String, nullable=True)
     archived: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     order: Mapped[int] = mapped_column(Integer, default=0, index=True)
+    parent_task_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+
+    @property
+    def is_upcoming(self) -> bool:
+        if self.done or self.recur == "None" or not self.due:
+            return False
+        return self.due > date.today().isoformat()
 
 
