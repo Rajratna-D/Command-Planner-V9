@@ -3,6 +3,7 @@ Database configuration — SQLAlchemy engine + session factory.
 Uses SQLite file-based database (planner.db) in the backend directory.
 """
 import os
+import sys
 from datetime import datetime, timezone
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker, DeclarativeBase
@@ -11,7 +12,16 @@ def utcnow():
     """Python 3.12+ compliant replacement for datetime.utcnow()."""
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+def get_data_directory():
+    if getattr(sys, 'frozen', False):
+        app_data = os.getenv('LOCALAPPDATA', os.path.expanduser('~'))
+        target = os.path.join(app_data, 'CommandPlannerV9')
+    else:
+        target = os.path.dirname(os.path.abspath(__file__))
+    os.makedirs(target, exist_ok=True)
+    return target
+
+BASE_DIR = get_data_directory()
 DB_PATH = os.path.join(BASE_DIR, "planner.db")
 DATABASE_URL = f"sqlite:///{DB_PATH}"
 
@@ -105,4 +115,5 @@ def init_db():
     run_migrations()
     from backend.models import task, test, assignment, practical, list_model, syllabus, pomodoro, note, settings  # noqa: F401
     Base.metadata.create_all(bind=engine)
+
 

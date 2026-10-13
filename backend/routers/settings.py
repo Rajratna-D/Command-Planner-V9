@@ -43,11 +43,18 @@ def get_setting(key: str, db: Session = Depends(get_db)):
 
 @router.put("/{key}", response_model=SettingResponse)
 def set_setting(key: str, data: SettingUpdate, db: Session = Depends(get_db)):
+    val = data.value
+    # Ensure val is a valid JSON string
+    try:
+        json.loads(val)
+    except Exception:
+        val = json.dumps(val)
+
     s = db.query(Setting).filter(Setting.key == key).first()
     if s:
-        s.value = data.value
+        s.value = val
     else:
-        s = Setting(key=key, value=data.value)
+        s = Setting(key=key, value=val)
         db.add(s)
     db.commit()
     db.refresh(s)

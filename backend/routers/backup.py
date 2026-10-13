@@ -7,24 +7,29 @@ Security Hardening:
 """
 import os
 import re
-import shutil
+import sqlite3
 from datetime import datetime
 from fastapi import APIRouter, Header, HTTPException
-from backend.database import DB_PATH
+from backend.database import DB_PATH, init_db
 from backend.schemas.schemas import BackupInfo
 
 router = APIRouter(prefix="/backup", tags=["backup"])
 
 BACKUP_DIR = os.path.join(os.path.dirname(DB_PATH), "backups")
 
-# ── Confirmation tokens for destructive operations ──────────────────────────
-# These must be sent as the X-Confirmation-Token header.
-# They prevent accidental triggers, CSRF attacks, and rogue script execution.
 WIPE_TOKEN = "CONFIRM-WIPE-DATABASE"
 RESTORE_TOKEN = "CONFIRM-RESTORE-DATABASE"
 
-# Allowed backup filename pattern (alphanumeric, underscores, hyphens, dots)
 _SAFE_FILENAME_RE = re.compile(r"^[a-zA-Z0-9_\-]+\.db$")
+
+
+def _backup_sqlite_atomically(src_path: str, dst_path: str):
+    """Safely copy an SQLite database including all active WAL journal commits."""
+    src_conn = sqlite3.connect(src_path)
+    dst_conn = sqlite3.connect(dst_path)
+    src_conn.backup(dst_conn)
+    dst_conn.close()
+    src_conn.close()
 
 
 def _create_safety_backup(label: str = "safety") -> str | None:
@@ -37,7 +42,7 @@ def _create_safety_backup(label: str = "safety") -> str | None:
         stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"{label}_{stamp}.db"
         dst = os.path.join(BACKUP_DIR, filename)
-        shutil.copy2(DB_PATH, dst)
+        _backup_sqlite_atomically(DB_PATH, dst)
         return filename
     except Exception:
         return None
@@ -89,20 +94,25 @@ def list_backups():
         if f.endswith(".db"):
             path = os.path.join(BACKUP_DIR, f)
             stat = os.stat(path)
-            backups.append(BackupInfo(
-                filename=f,
-                created_at=datetime.fromtimestamp(stat.st_ctime).isoformat(),
-                size_bytes=stat.st_size,
-            ))
+            # Exclude corrupted or empty (<4KB) files from the UI list
+            if stat.st_size > 4096:
+                backups.append(BackupInfo(
+                    filename=f,
+                    created_at=datetime.fromtimestamp(stat.st_ctime).isoformat(),
+                    size_bytes=stat.st_size,
+                ))
     return backups
 
 
 @router.post("/create", response_model=BackupInfo)
 def create_backup():
+    if not os.path.exists(DB_PATH):
+        raise HTTPException(status_code=404, detail="Database file not found")
+
     os.makedirs(BACKUP_DIR, exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     dst = os.path.join(BACKUP_DIR, f"backup_{stamp}.db")
-    shutil.copy2(DB_PATH, dst)
+    _backup_sqlite_atomically(DB_PATH, dst)
     # Keep only last 30 backups
     files = sorted(os.listdir(BACKUP_DIR))
     for old in files[:-30]:
@@ -148,7 +158,20 @@ def restore_backup(
     from backend.database import engine
     engine.dispose()
 
-    shutil.copy2(abs_path, DB_PATH)
+    # Clean existing WAL/SHM files to avoid SQLite journal mismatch
+    for extra in [DB_PATH + "-wal", DB_PATH + "-shm"]:
+        if os.path.exists(extra):
+            try:
+                os.remove(extra)
+            except OSError:
+                pass
+
+    # Atomically restore
+    _backup_sqlite_atomically(abs_path, DB_PATH)
+
+    # Ensure schema and migrations are fully up to date
+    init_db()
+
     return {
         "message": "Backup restored successfully.",
         "safety_backup": safety,

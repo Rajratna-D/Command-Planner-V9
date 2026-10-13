@@ -288,7 +288,7 @@ class NoteResponse(BaseModel):
 # ══════════════════════════════════════════════════════════════════════════
 
 class SettingUpdate(BaseModel):
-    key: str = Field(..., max_length=100)
+    key: str | None = Field(default=None, max_length=100)
     value: str = Field(..., max_length=10000)  # JSON string
 
 class SettingResponse(BaseModel):

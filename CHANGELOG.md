@@ -35,10 +35,47 @@ When logging future changes, please use the following template:
 
 ## Versions & Releases
 
+- [9.3.0 - 2026-10-13 (Standalone Desktop Executable, Atomic SQLite Backups & OLED Theme Persistence)](#930---2026-10-13)
 - [9.2.0 - 2026-10-11 (Task Ordering, Pomodoro Guard, Historical Reports, Smart Recurrence & Launcher Hardening)](#920---2026-10-11)
 - [9.1.0 - 2026-09-12 (Security Hardening, Production Architecture & Guides)](#910---2026-09-12)
 - [9.0.0 - 2026-09-11 (Command Planner V9 Full-Stack Architecture Launch)](#900---2026-09-11)
 - [Legacy Architecture (V1 - V8)](#legacy-architecture-v1---v8)
+
+---
+
+## [9.3.0] - 2026-10-13
+
+### Overview
+Official standalone desktop release for Windows (`.exe`). Wraps React 19 + FastAPI stack into a native Edge WebView2 desktop container with zero external runtime dependencies (no Node or Python required for end users), 100% offline air-gapped networking, two-layer OLED theme persistence, and atomic SQLite backup replication.
+
+---
+
+### 1. Standalone Windows Executable & WebView2 Architecture
+- **Type**: Major / Feature
+- **Affected Files**:
+  - `desktop.py` (Desktop entry point)
+  - `build_desktop.bat` (PyInstaller automated build pipeline)
+  - `backend/main.py` (SPA static mount & loopback origin CORS)
+- **What Changed**: Built unified packaging pipeline generating a native executable with Microsoft Edge WebView2 and in-process daemon FastAPI backend.
+- **Outcome / Goal**: Zero runtime setup for end users; full air-gapped 100% offline desktop support.
+
+### 2. OLED Theme Persistence Engine
+- **Type**: Bugfix / Minor
+- **Affected Files**:
+  - `desktop.py` (`private_mode=False`, persistent `storage_path`)
+  - `backend/routers/settings.py` (Normalized `PUT /settings/theme` endpoint)
+  - `backend/schemas/schemas.py` (`SettingUpdate.key` optional)
+  - `backend/main.py` (Server-side pre-render theme injection in `index.html`)
+  - `frontend/src/store/appStore.ts` & `frontend/src/App.tsx`
+- **What Changed**: Eliminated incognito cache wipes and asynchronous race conditions overriding stored theme. Theme is pre-rendered in root DOM and pre-seeded into `localStorage`.
+- **Outcome / Goal**: Preferred theme (including OLED Black) is 100% retained across application restarts.
+
+### 3. Hardened Atomic SQLite Backup Engine
+- **Type**: Bugfix / Security
+- **Affected Files**:
+  - `backend/routers/backup.py` (`_backup_sqlite_atomically`, WAL journal cleanup, post-restore schema check)
+- **What Changed**: Converted backup and restore operations from raw file copies to atomic SQLite backup replication, with cleanup of active WAL journals and automatic schema verification.
+- **Outcome / Goal**: Zero corruption or 500 errors on backup restore.
 
 ---
 

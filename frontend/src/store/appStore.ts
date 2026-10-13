@@ -77,6 +77,13 @@ export const useAppStore = create<AppState>((set, get) => ({
     document.documentElement.setAttribute('data-theme', theme);
     localStorage.setItem('cp-theme', theme);
     set({ theme });
+    try {
+      fetch('/api/settings/theme', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: 'theme', value: JSON.stringify(theme) }),
+      }).catch(() => {});
+    } catch {}
   },
   toggleTheme: () => {
     const idx = ALL_THEMES.indexOf(get().theme);
