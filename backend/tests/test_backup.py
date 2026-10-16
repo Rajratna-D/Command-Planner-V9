@@ -9,8 +9,13 @@ def test_backup_flow(client, tmp_path):
     """Test backup create, list, and restore flow with confirmation tokens."""
     # Setup temp DB_PATH and BACKUP_DIR
     temp_db = tmp_path / "test_planner.db"
-    # Create a dummy database file
-    temp_db.write_text("dummy sqlite database content")
+    # Create a real SQLite database file
+    import sqlite3
+    conn = sqlite3.connect(str(temp_db))
+    conn.execute("CREATE TABLE test (id INTEGER PRIMARY KEY, value TEXT)")
+    conn.execute("INSERT INTO test (value) VALUES ('original')")
+    conn.commit()
+    conn.close()
     
     temp_backup_dir = tmp_path / "backups"
     temp_backup_dir.mkdir()
@@ -49,7 +54,10 @@ def test_backup_flow(client, tmp_path):
         
         # ── Restore WITH correct token should SUCCEED ──
         # 1. Modify the test_planner.db content
-        temp_db.write_text("modified database content")
+        conn_mod = sqlite3.connect(str(temp_db))
+        conn_mod.execute("UPDATE test SET value = 'modified'")
+        conn_mod.commit()
+        conn_mod.close()
         # 2. Call restore with correct confirmation token
         restore_res = client.post(
             f"/backup/restore?filename={filename}",
@@ -59,7 +67,10 @@ def test_backup_flow(client, tmp_path):
         response_data = restore_res.json()
         assert response_data["message"] == "Backup restored successfully."
         # 3. Verify it restored the original content
-        assert temp_db.read_text() == "dummy sqlite database content"
+        conn_check = sqlite3.connect(str(temp_db))
+        val = conn_check.execute("SELECT value FROM test").fetchone()[0]
+        conn_check.close()
+        assert val == "original"
 
 
 def test_wipe_database(client, tmp_path):

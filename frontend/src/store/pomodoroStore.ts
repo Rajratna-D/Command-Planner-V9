@@ -151,8 +151,90 @@ function getStoredActiveSession(): ActiveSessionReceipt | null {
     const raw = localStorage.getItem(SESSION_STORAGE_KEY);
     return raw ? JSON.parse(raw) : null;
   } catch {
-    return null;
+}
+
+interface PendingSessionLog {
+  id: string;
+  data: Parameters<typeof pomodoroApi.createSession>[0];
+  createdAt: number;
+}
+
+const PENDING_SESSIONS_STORAGE_KEY = 'cp-pending-pomo-sessions';
+
+function getPendingSessions(): PendingSessionLog[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(PENDING_SESSIONS_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
   }
+}
+
+function savePendingSessions(list: PendingSessionLog[]) {
+  if (typeof window === 'undefined') return;
+  if (list.length === 0) {
+    localStorage.removeItem(PENDING_SESSIONS_STORAGE_KEY);
+  } else {
+    localStorage.setItem(PENDING_SESSIONS_STORAGE_KEY, JSON.stringify(list));
+  }
+}
+
+async function recordSessionSafely(
+  payload: Parameters<typeof pomodoroApi.createSession>[0],
+  onSuccess?: () => void,
+  successToast?: string
+): Promise<void> {
+  const pending = getPendingSessions();
+  const pendingId = `pending-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  pending.push({ id: pendingId, data: payload, createdAt: Date.now() });
+  savePendingSessions(pending);
+
+  try {
+    await pomodoroApi.createSession(payload);
+    const updated = getPendingSessions().filter((s) => s.id !== pendingId);
+    savePendingSessions(updated);
+    if (successToast) {
+      useAppStore.getState().addToast(successToast, 'success');
+    }
+    if (onSuccess) onSuccess();
+  } catch {
+    useAppStore.getState().addToast(
+      `Saved ${payload.duration_min} min focus session locally. Will automatically sync to server when connected!`,
+      'info'
+    );
+  }
+}
+
+export async function flushPendingSessions(loadTodayCallback?: () => Promise<void>) {
+  const list = getPendingSessions();
+  if (list.length === 0) return;
+
+  let synced = 0;
+  for (const item of [...list]) {
+    try {
+      await pomodoroApi.createSession(item.data);
+      const remaining = getPendingSessions().filter((s) => s.id !== item.id);
+      savePendingSessions(remaining);
+      synced++;
+    } catch {
+      // Backend still unreachable
+      break;
+    }
+  }
+
+  if (synced > 0) {
+    useAppStore.getState().addToast(`Synced ${synced} saved focus session(s) to server! 🎉`, 'success');
+    if (loadTodayCallback) {
+      await loadTodayCallback();
+    }
+  }
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('online', () => {
+    flushPendingSessions().catch(() => {});
+  });
 }
 
 function getStoredNumber(key: string, defaultValue: number): number {
@@ -300,8 +382,8 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
 
         const unifiedTask = getUnifiedTaskString(taskName, subjectName);
 
-        try {
-          await pomodoroApi.createSession({
+        await recordSessionSafely(
+          {
             date: startDateStr,
             time: currentDate.toTimeString().slice(0, 5),
             type: mode,
@@ -311,15 +393,10 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
             task_id: taskId,
             duration_min: elapsedMin,
             start_time: startTimeStr,
-          });
-          await get().loadTodaySessions();
-          useAppStore.getState().addToast(
-            `Saved ${elapsedMin} min focus session! Switching to ${MODE_LABELS[nextMode]}`,
-            'success'
-          );
-        } catch {
-          useAppStore.getState().addToast('Failed to save session to server', 'error');
-        }
+          },
+          () => get().loadTodaySessions(),
+          `Saved ${elapsedMin} min focus session! Switching to ${MODE_LABELS[nextMode]}`
+        );
       }
 
       const targetDuration = get().getDurationForMode(nextMode);
@@ -454,6 +531,7 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
 
     loadTodaySessions: async () => {
       try {
+        await flushPendingSessions();
         const now = new Date();
         const y = now.getFullYear();
         const m = String(now.getMonth() + 1).padStart(2, '0');
@@ -490,8 +568,8 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
 
         const unifiedTask = getUnifiedTaskString(active.taskName, active.subjectName);
 
-        try {
-          await pomodoroApi.createSession({
+        await recordSessionSafely(
+          {
             date: startDateStr,
             time: timeStr,
             type: active.mode,
@@ -501,18 +579,10 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
             task_id: active.taskId,
             duration_min: durationMin,
             start_time: startTimeStr,
-          });
-          await get().loadTodaySessions();
-          useAppStore.getState().addToast(
-            `Welcome back! Your ${MODE_LABELS[active.mode]} (${durationMin} min) completed while away and was saved! 🎉`,
-            'success'
-          );
-        } catch {
-          useAppStore.getState().addToast(
-            `Recovered ${MODE_LABELS[active.mode]} session, but failed to log to server`,
-            'error'
-          );
-        }
+          },
+          () => get().loadTodaySessions(),
+          `Welcome back! Your ${MODE_LABELS[active.mode]} (${durationMin} min) completed while away and was saved! 🎉`
+        );
 
         // Determine next mode
         const { sessions, longBreakInterval, autoStartBreak, autoStartFocus, getDurationForMode } = get();
@@ -579,21 +649,20 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
 
         const unifiedTask = getUnifiedTaskString(taskName, subjectName);
 
-        pomodoroApi.createSession({
-          date: startDateStr,
-          time: currentDate.toTimeString().slice(0, 5),
-          type: mode,
-          task: unifiedTask,
-          subject_id: subjectId,
-          subject_name: subjectName,
-          task_id: taskId,
-          duration_min: currentDurationMin,
-          start_time: startTimeStr,
-        }).then(() => {
-          get().loadTodaySessions();
-        }).catch(() => {
-          useAppStore.getState().addToast('Failed to log pomodoro session', 'error');
-        });
+        recordSessionSafely(
+          {
+            date: startDateStr,
+            time: currentDate.toTimeString().slice(0, 5),
+            type: mode,
+            task: unifiedTask,
+            subject_id: subjectId,
+            subject_name: subjectName,
+            task_id: taskId,
+            duration_min: currentDurationMin,
+            start_time: startTimeStr,
+          },
+          () => get().loadTodaySessions()
+        );
 
 
         // Determine next mode based on completed focus count

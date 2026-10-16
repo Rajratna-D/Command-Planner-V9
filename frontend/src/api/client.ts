@@ -49,6 +49,10 @@ if (typeof window !== 'undefined') {
   window.addEventListener('online', () => {
     syncOfflineQueue().catch(() => {});
   });
+  // Also attempt sync on initial page load if items exist
+  setTimeout(() => {
+    syncOfflineQueue().catch(() => {});
+  }, 1000);
 }
 
 function invalidateCacheForPath(path: string) {
@@ -106,6 +110,14 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
       ...options,
     });
   } catch (networkErr) {
+    // Mutation failure fallback: queue mutation so user data is never lost
+    if (!isGet && typeof window !== 'undefined') {
+      const queue = JSON.parse(localStorage.getItem('cp-offline-queue') || '[]');
+      queue.push({ path, method, body: options?.body });
+      localStorage.setItem('cp-offline-queue', JSON.stringify(queue));
+      useAppStore.getState().addToast('Backend unreachable: Changes saved locally. Will sync automatically.', 'info');
+      return {} as T;
+    }
     // Network failure fallback for GET with 5 min TTL
     if (isGet && typeof window !== 'undefined') {
       const raw = localStorage.getItem(`cp-cache-${path}`);
@@ -129,6 +141,14 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   }
 
   if (!res.ok) {
+    // If backend proxy error or server error during mutation, preserve change in queue
+    if (!isGet && res.status >= 500 && typeof window !== 'undefined') {
+      const queue = JSON.parse(localStorage.getItem('cp-offline-queue') || '[]');
+      queue.push({ path, method, body: options?.body });
+      localStorage.setItem('cp-offline-queue', JSON.stringify(queue));
+      useAppStore.getState().addToast('Server unavailable: Changes saved locally and will auto-sync.', 'info');
+      return {} as T;
+    }
     const err = await res.json().catch(() => ({ detail: res.statusText }));
     throw new Error(err.detail || 'Request failed');
   }

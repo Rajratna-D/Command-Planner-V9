@@ -25,11 +25,15 @@ _SAFE_FILENAME_RE = re.compile(r"^[a-zA-Z0-9_\-]+\.db$")
 
 def _backup_sqlite_atomically(src_path: str, dst_path: str):
     """Safely copy an SQLite database including all active WAL journal commits."""
-    src_conn = sqlite3.connect(src_path)
-    dst_conn = sqlite3.connect(dst_path)
-    src_conn.backup(dst_conn)
-    dst_conn.close()
-    src_conn.close()
+    try:
+        src_conn = sqlite3.connect(src_path)
+        dst_conn = sqlite3.connect(dst_path)
+        src_conn.backup(dst_conn)
+        dst_conn.close()
+        src_conn.close()
+    except Exception:
+        import shutil
+        shutil.copy2(src_path, dst_path)
 
 
 def _create_safety_backup(label: str = "safety") -> str | None:

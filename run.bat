@@ -62,7 +62,7 @@ powershell -Command "try { (Get-NetTCPConnection -LocalPort 8000 -ErrorAction St
 
 :: 4. Start FastAPI backend server in background
 echo [2/3] Starting FastAPI Backend on port 8000...
-start /b "" ".\.venv\Scripts\python.exe" -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload
+start "Command Planner - Backend (Port 8000)" ".\.venv\Scripts\python.exe" -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload
 
 :: 5. Health check loop: wait until backend is responding
 echo [*] Waiting for backend to become ready...
