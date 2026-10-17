@@ -1,66 +1,66 @@
 @echo off
-setlocal enabledelayedexpansion
+setlocal
 title Command Planner - Web App (Dev Mode)
 echo =======================================================
 echo  Starting Command Planner Fullstack Application...
 echo =======================================================
 
-:: 1. Check Python virtual environment (.venv)
-if not exist ".\.venv\Scripts\python.exe" (
-    echo [!] Python virtual environment (.venv) not found. Setting up...
-    where python >nul 2>&1
-    if errorlevel 1 (
-        echo [ERROR] Python was not found in PATH.
-        echo Please install Python 3.10+ and add it to your PATH.
-        pause
-        exit /b 1
-    )
-    echo [*] Creating virtual environment (.venv)...
-    python -m venv .venv
-    if errorlevel 1 (
-        echo [ERROR] Failed to create virtual environment.
-        pause
-        exit /b 1
-    )
-    echo [*] Installing backend dependencies...
-    .\.venv\Scripts\python.exe -m pip install --upgrade pip
-    .\.venv\Scripts\python.exe -m pip install -r requirements.txt
-    if errorlevel 1 (
-        echo [ERROR] Failed to install backend requirements.
-        pause
-        exit /b 1
-    )
-    echo [✓] Backend environment ready!
+:: 1. Check Python virtual environment
+if exist ".\.venv\Scripts\python.exe" goto VENV_OK
+echo [!] Python virtual environment not found. Setting up...
+where python >nul 2>&1
+if errorlevel 1 (
+    echo [ERROR] Python was not found in PATH.
+    echo Please install Python 3.10+ and add it to your PATH.
+    pause
+    exit /b 1
 )
+echo [*] Creating virtual environment...
+python -m venv .venv
+if errorlevel 1 (
+    echo [ERROR] Failed to create virtual environment.
+    pause
+    exit /b 1
+)
+echo [*] Installing backend dependencies...
+.\.venv\Scripts\python.exe -m pip install --upgrade pip
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+if errorlevel 1 (
+    echo [ERROR] Failed to install backend requirements.
+    pause
+    exit /b 1
+)
+:VENV_OK
+echo [OK] Backend environment ready!
 
 :: 2. Check Node.js / frontend dependencies
 set PATH=C:\Program Files\nodejs;%PATH%
-if not exist "frontend\node_modules" (
-    echo [!] Frontend dependencies (node_modules) not found. Setting up...
-    where npm >nul 2>&1
-    if errorlevel 1 (
-        echo [ERROR] npm was not found in PATH.
-        echo Please install Node.js from https://nodejs.org/
-        pause
-        exit /b 1
-    )
-    echo [*] Installing frontend packages (npm install)...
-    cd frontend
-    call npm install
-    cd ..
-    if errorlevel 1 (
-        echo [ERROR] Failed to install npm packages.
-        pause
-        exit /b 1
-    )
-    echo [✓] Frontend dependencies ready!
+if exist "frontend\node_modules" goto FRONTEND_OK
+echo [!] Frontend dependencies not found. Setting up...
+where npm >nul 2>&1
+if errorlevel 1 (
+    echo [ERROR] npm was not found in PATH.
+    echo Please install Node.js from https://nodejs.org/
+    pause
+    exit /b 1
 )
+echo [*] Installing frontend packages...
+cd frontend
+call npm install
+cd ..
+if errorlevel 1 (
+    echo [ERROR] Failed to install npm packages.
+    pause
+    exit /b 1
+)
+:FRONTEND_OK
+echo [OK] Frontend dependencies ready!
 
 :: 3. Clear port 8000 conflicts
 echo [1/3] Checking for port 8000 conflicts...
 powershell -Command "try { (Get-NetTCPConnection -LocalPort 8000 -ErrorAction Stop).OwningProcess | Select-Object -Unique | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue } } catch { exit 0 }"
 
-:: 4. Start FastAPI backend server in background
+:: 4. Start FastAPI backend server in background window
 echo [2/3] Starting FastAPI Backend on port 8000...
 start "Command Planner - Backend (Port 8000)" ".\.venv\Scripts\python.exe" -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload
 
@@ -80,7 +80,7 @@ if errorlevel 1 (
     timeout /t 1 /nobreak > nul
     goto WAIT_BACKEND
 )
-echo [✓] Backend is healthy and ready!
+echo [OK] Backend is healthy and ready!
 
 :: 6. Start Vite Frontend and launch browser
 echo [3/3] Starting React Frontend on port 5173 and opening browser...

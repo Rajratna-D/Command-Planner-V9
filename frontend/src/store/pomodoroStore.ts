@@ -151,6 +151,8 @@ function getStoredActiveSession(): ActiveSessionReceipt | null {
     const raw = localStorage.getItem(SESSION_STORAGE_KEY);
     return raw ? JSON.parse(raw) : null;
   } catch {
+    return null;
+  }
 }
 
 interface PendingSessionLog {
